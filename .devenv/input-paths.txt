@@ -1,0 +1,7 @@
+/home/ville/repositories/nonesible/.devenv/bootstrap/bootstrapLib.nix
+/home/ville/repositories/nonesible/.devenv/bootstrap/default.nix
+/home/ville/repositories/nonesible/.devenv/bootstrap/resolve-lock.nix
+/home/ville/repositories/nonesible/devenv.local.nix
+/home/ville/repositories/nonesible/devenv.lock
+/home/ville/repositories/nonesible/devenv.nix
+/home/ville/repositories/nonesible/.env
