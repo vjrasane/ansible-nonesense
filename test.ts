@@ -19,22 +19,17 @@ const play = define`Play`(async (msg: string) => {
   return res.msg;
 });
 
-const main = async () => {
-  await Promise.all(
-    hosts.map((h) =>
-      h.run(
-        define`Running on ${h.name}`(async () => {
-          const msg = run`Subcontext`(async () => {
-            const msg = await play("Hello " + h.name);
-            return msg;
-          });
-          context.log(`Got message: ${msg}`);
-          await debug`Send message`({ msg: "Hello again!" });
-          context.log(`Finished running on ${h.name}`);
-        }),
-      ),
-    ),
-  );
+const procedure = async () => {
+  const msg = await run`Subcontext`(async () => {
+    const msg = await play("Hello " + context.host.name);
+    return msg;
+  });
+  context.log(`Got message: ${msg}`);
+  await debug`Send message`({ msg: "Hello again!" });
+  context.log(`Finished running on ${context.host.name}`);
 };
+
+const main = () =>
+  hosts.map((h) => h.run(define`Running on ${h.name}`(procedure)));
 
 main();
