@@ -81,7 +81,8 @@ export async function executeTask(
   const opts = resolveOptions(perTask);
 
   const hostName = opts.host.name;
-  for (const cb of opts.callbacks) cb.onTaskStart?.(hostName, module, args);
+  const taskName = opts.name;
+  for (const cb of opts.callbacks) cb.onTaskStart?.(hostName, module, args, taskName);
 
   const hostInfo = resolveHost(opts.host);
 
@@ -107,7 +108,7 @@ export async function executeTask(
       hostResult = firstKey ? backendResult[firstKey] : { changed: false, failed: true };
     }
   } catch (error) {
-    for (const cb of opts.callbacks) cb.onTaskError?.(hostName, module, error as Error);
+    for (const cb of opts.callbacks) cb.onTaskError?.(hostName, module, error as Error, taskName);
     throw error;
   } finally {
     if (hostInfo.tmpDir) {
@@ -115,7 +116,7 @@ export async function executeTask(
     }
   }
 
-  for (const cb of opts.callbacks) cb.onTaskComplete?.(hostName, module, hostResult);
+  for (const cb of opts.callbacks) cb.onTaskComplete?.(hostName, module, hostResult, taskName);
 
   if (!opts.continueOnError && hostResult.failed) {
     throw new Error(`Task ${module} failed on: ${hostName}`);

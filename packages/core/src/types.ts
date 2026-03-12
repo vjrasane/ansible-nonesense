@@ -1,6 +1,16 @@
 export interface Callback {
-  onTaskStart?(host: string, module: string, args: Record<string, unknown>, name?: string): void;
-  onTaskComplete?(host: string, module: string, result: HostResult<Record<string, unknown>>, name?: string): void;
+  onTaskStart?(
+    host: string,
+    module: string,
+    args: Record<string, unknown>,
+    name?: string,
+  ): void;
+  onTaskComplete?(
+    host: string,
+    module: string,
+    result: HostResult<Record<string, unknown>>,
+    name?: string,
+  ): void;
   onTaskError?(host: string, module: string, error: Error, name?: string): void;
 }
 
@@ -10,6 +20,7 @@ export interface Host {
 }
 
 export interface Options {
+  name?: string;
   host?: Host;
   backend?: ExecutionBackend;
   callbacks?: Callback[];

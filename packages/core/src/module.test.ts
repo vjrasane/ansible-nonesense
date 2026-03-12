@@ -108,6 +108,42 @@ describe("module", () => {
     });
   });
 
+  describe("tagged template naming", () => {
+    it("passes task name through tagged template", async () => {
+      const cb = { names: [] as (string | undefined)[], onTaskStart(_h: string, _m: string, _a: Record<string, unknown>, name?: string) { this.names.push(name); } };
+      configure({ callbacks: [cb], backend });
+
+      await copy`Deploy config`({ dest: "/tmp/foo" });
+      await copy({ dest: "/tmp/bar" });
+
+      expect(cb.names).toEqual(["Deploy config", undefined]);
+    });
+
+    it("tagged template preserves module behavior", async () => {
+      const namedCopy = copy`Install app`;
+      await namedCopy({ dest: "/tmp/foo" });
+
+      expect(backend.executed[0].module).toBe("ansible.builtin.copy");
+      expect(backend.executed[0].args.dest).toBe("/tmp/foo");
+    });
+
+    it("tagged template supports interpolation", async () => {
+      const env = "production";
+      const cb = { name: undefined as string | undefined, onTaskStart(_h: string, _m: string, _a: Record<string, unknown>, name?: string) { this.name = name; } };
+      configure({ callbacks: [cb], backend });
+
+      await copy`Deploy ${env} config`({ dest: "/tmp/foo" });
+
+      expect(cb.name).toBe("Deploy production config");
+    });
+
+    it("tagged template merges with per-task options", async () => {
+      await copy`Install`({ dest: "/tmp/foo" }, { become: true });
+
+      expect(backend.executed[0].become).toBe(true);
+    });
+  });
+
   describe("typescript control flow", () => {
     it("conditional execution based on task result", async () => {
       const backend = new DryRunBackend([
