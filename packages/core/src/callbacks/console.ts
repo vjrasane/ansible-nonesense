@@ -5,16 +5,17 @@ const red = (s: string) => `\x1b[31m${s}\x1b[0m`;
 const yellow = (s: string) => `\x1b[33m${s}\x1b[0m`;
 const dim = (s: string) => `\x1b[2m${s}\x1b[0m`;
 
-function label(module: string, name?: string): string {
-  return name ? `${name} ${dim(`(${module})`)}` : module;
+function label(module: string, path: string[]): string {
+  if (path.length === 0) return module;
+  return `${path.join(" > ")} ${dim(`(${module})`)}`;
 }
 
 export const consoleCallback: Callback = {
-  onTaskStart(host, module, _args, name) {
-    console.log(`${dim(`[${host}]`)} ${label(module, name)} ${dim("...")}`);
+  onTaskStart(host, module, _args, path) {
+    console.log(`${dim(`[${host}]`)} ${label(module, path)} ${dim("...")}`);
   },
 
-  onTaskComplete(host, module, result: HostResult<Record<string, unknown>>, name) {
+  onTaskComplete(host, module, result: HostResult<Record<string, unknown>>, path) {
     const status = result.failed
       ? red("FAILED")
       : result.changed
@@ -22,10 +23,10 @@ export const consoleCallback: Callback = {
         : green("OK");
 
     const msg = result.failed && result.msg ? dim(` ${result.msg}`) : "";
-    console.log(`${dim(`[${host}]`)} ${label(module, name)} ${status}${msg}`);
+    console.log(`${dim(`[${host}]`)} ${label(module, path)} ${status}${msg}`);
   },
 
-  onTaskError(host, module, error, name) {
-    console.log(`${dim(`[${host}]`)} ${label(module, name)} ${red(`ERROR: ${error.message}`)}`);
+  onTaskError(host, module, error, path) {
+    console.log(`${dim(`[${host}]`)} ${label(module, path)} ${red(`ERROR: ${error.message}`)}`);
   },
 };

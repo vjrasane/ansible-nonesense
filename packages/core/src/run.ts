@@ -14,6 +14,7 @@ import { consoleCallback } from "./callbacks/console.ts";
 
 interface RunState {
   host?: Host;
+  path: string[];
   options: Options;
 }
 
@@ -60,6 +61,10 @@ export function resolveOptions(perTask?: TaskOptions): ResolvedOptions {
   };
 }
 
+export function currentPath(): string[] {
+  return runContext.getStore()?.path ?? [];
+}
+
 function resolveHost(host: Host): {
   inventory: string;
   tmpDir?: string;
@@ -87,8 +92,12 @@ export async function executeTask(
   const opts = resolveOptions(perTask);
 
   const hostName = opts.host.name;
-  const taskName = opts.name;
-  for (const cb of opts.callbacks) cb.onTaskStart?.(hostName, module, args, taskName);
+  const contextPath = currentPath();
+  const taskPath = opts.name
+    ? [...contextPath, opts.name]
+    : contextPath;
+
+  for (const cb of opts.callbacks) cb.onTaskStart?.(hostName, module, args, taskPath);
 
   const hostInfo = resolveHost(opts.host);
 
@@ -114,7 +123,7 @@ export async function executeTask(
       hostResult = firstKey ? backendResult[firstKey] : { changed: false, failed: true };
     }
   } catch (error) {
-    for (const cb of opts.callbacks) cb.onTaskError?.(hostName, module, error as Error, taskName);
+    for (const cb of opts.callbacks) cb.onTaskError?.(hostName, module, error as Error, taskPath);
     throw error;
   } finally {
     if (hostInfo.tmpDir) {
@@ -122,7 +131,7 @@ export async function executeTask(
     }
   }
 
-  for (const cb of opts.callbacks) cb.onTaskComplete?.(hostName, module, hostResult, taskName);
+  for (const cb of opts.callbacks) cb.onTaskComplete?.(hostName, module, hostResult, taskPath);
 
   if (!opts.continueOnError && hostResult.failed) {
     throw new Error(`Task ${module} failed on: ${hostName}`);
@@ -133,41 +142,69 @@ export async function executeTask(
 
 export const task = executeTask;
 
-export interface RunnableHost extends Host {
-  run<T>(fn: () => Promise<T>, opts?: Options): Promise<T>;
-}
+type RunFn = {
+  <T>(fn: () => Promise<T>): Promise<T>;
+  <T>(fn: () => Promise<T>, opts: Options): Promise<T>;
+  <T>(opts: Options, fn: () => Promise<T>): Promise<T>;
+};
 
-export function host(h: Host, defaults?: Options): RunnableHost {
-  return {
-    ...h,
-    run<T>(fn: () => Promise<T>, opts?: Options) {
-      return _run(h, { ...defaults, ...opts }, fn);
-    },
+export interface RunnableHost extends Host {
+  run: RunFn & {
+    (strings: TemplateStringsArray, ...values: unknown[]): RunFn;
   };
 }
 
-export function run<T>(fn: () => Promise<T>): Promise<T>;
-export function run<T>(opts: Options, fn: () => Promise<T>): Promise<T>;
-export function run<T>(
-  fnOrOpts: (() => Promise<T>) | Options,
-  maybeFn?: () => Promise<T>,
-): Promise<T> {
-  if (typeof fnOrOpts === "function") {
-    return _run(undefined, {}, fnOrOpts);
+function resolveRunArgs(args: unknown[]): { opts: Options; fn: () => Promise<unknown> } {
+  if (typeof args[0] === "function") {
+    const opts = typeof args[1] === "object" && args[1] !== null ? args[1] as Options : {};
+    return { fn: args[0] as () => Promise<unknown>, opts };
   }
-  return _run(undefined, fnOrOpts, maybeFn!);
+  return { opts: args[0] as Options, fn: args[1] as () => Promise<unknown> };
 }
+
+export function host(h: Host, defaults?: Options): RunnableHost {
+  function hostRun(...args: unknown[]): unknown {
+    if (Array.isArray(args[0]) && "raw" in (args[0] as object)) {
+      const name = String.raw(args[0] as TemplateStringsArray, ...args.slice(1));
+      return (...innerArgs: unknown[]) => {
+        const { opts, fn } = resolveRunArgs(innerArgs);
+        return _run(h, { ...defaults, ...opts }, fn, name);
+      };
+    }
+    const { opts, fn } = resolveRunArgs(args);
+    return _run(h, { ...defaults, ...opts }, fn);
+  }
+
+  return { ...h, run: hostRun as RunnableHost["run"] };
+}
+
+export const run: RunFn & {
+  (strings: TemplateStringsArray, ...values: unknown[]): RunFn;
+} = function run(...args: unknown[]): unknown {
+  if (Array.isArray(args[0]) && "raw" in (args[0] as object)) {
+    const name = String.raw(args[0] as TemplateStringsArray, ...args.slice(1));
+    return (...innerArgs: unknown[]) => {
+      const { opts, fn } = resolveRunArgs(innerArgs);
+      return _run(undefined, opts, fn, name);
+    };
+  }
+  const { opts, fn } = resolveRunArgs(args);
+  return _run(undefined, opts, fn);
+} as typeof run;
 
 async function _run<T>(
   h: Host | undefined,
   opts: Options,
   fn: () => Promise<T>,
+  name?: string,
 ): Promise<T> {
   const parentState = runContext.getStore();
   const parentOpts = parentState?.options ?? {};
+  const parentPath = parentState?.path ?? [];
 
   const state: RunState = {
     host: h ?? parentState?.host,
+    path: name ? [...parentPath, name] : parentPath,
     options: { ...parentOpts, ...opts },
   };
 
