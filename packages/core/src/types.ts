@@ -22,7 +22,6 @@ export interface Host {
 
 export interface Options {
   name?: string;
-  host?: Host;
   backend?: ExecutionBackend;
   callbacks?: Callback[];
   continueOnError?: boolean;

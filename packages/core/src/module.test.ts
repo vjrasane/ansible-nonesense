@@ -31,8 +31,10 @@ describe("module", () => {
       expect(backend.executed[0].inventory).toBe("localhost,");
     });
 
-    it("per-task host override", async () => {
-      await debug({ msg: "hello" }, { host: { name: "web01" } });
+    it("per-task host override via host().run()", async () => {
+      await host({ name: "web01" }).run(async () => {
+        await debug({ msg: "hello" });
+      });
 
       expect(backend.executed[0].inventory).toBe("web01,");
     });

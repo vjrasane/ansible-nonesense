@@ -13,13 +13,12 @@ import { LocalBackend } from "./backends/local.ts";
 import { consoleCallback } from "./callbacks/console.ts";
 
 interface RunState {
+  host?: Host;
   options: Options;
 }
 
-const DEFAULTS: Required<Pick<Options, "host" | "callbacks">> & Options = {
-  host: { name: "localhost", connection: "local" },
-  callbacks: [consoleCallback],
-};
+const DEFAULT_HOST: Host = { name: "localhost", connection: "local" };
+const DEFAULT_CALLBACKS = [consoleCallback];
 
 let globalConfig: Options = {};
 const runContext = new AsyncLocalStorage<RunState>();
@@ -28,27 +27,34 @@ export function configure(opts: Options): void {
   globalConfig = { ...globalConfig, ...opts };
 }
 
-export function resolveOptions(perTask?: TaskOptions): Required<Pick<Options, "host" | "callbacks" | "backend">> & Options {
+interface ResolvedOptions extends Options {
+  host: Host;
+  backend: Required<Options>["backend"];
+  callbacks: Required<Options>["callbacks"];
+}
+
+export function resolveOptions(perTask?: TaskOptions): ResolvedOptions {
   const state = runContext.getStore();
   const ctx = state?.options ?? {};
+
+  const host = state?.host ?? DEFAULT_HOST;
 
   const backend =
     perTask?.backend ??
     ctx.backend ??
     globalConfig.backend ??
-    DEFAULTS.backend ??
     new LocalBackend();
   const callbacks =
     perTask?.callbacks ??
     ctx.callbacks ??
     globalConfig.callbacks ??
-    DEFAULTS.callbacks;
+    DEFAULT_CALLBACKS;
 
   return {
-    ...DEFAULTS,
     ...globalConfig,
     ...ctx,
     ...perTask,
+    host,
     backend,
     callbacks,
   };
@@ -135,12 +141,25 @@ export function host(h: Host, defaults?: Options): RunnableHost {
   return {
     ...h,
     run<T>(fn: () => Promise<T>, opts?: Options) {
-      return _run({ ...defaults, ...opts, host: h }, fn);
+      return _run(h, { ...defaults, ...opts }, fn);
     },
   };
 }
 
+export function run<T>(fn: () => Promise<T>): Promise<T>;
+export function run<T>(opts: Options, fn: () => Promise<T>): Promise<T>;
+export function run<T>(
+  fnOrOpts: (() => Promise<T>) | Options,
+  maybeFn?: () => Promise<T>,
+): Promise<T> {
+  if (typeof fnOrOpts === "function") {
+    return _run(undefined, {}, fnOrOpts);
+  }
+  return _run(undefined, fnOrOpts, maybeFn!);
+}
+
 async function _run<T>(
+  h: Host | undefined,
   opts: Options,
   fn: () => Promise<T>,
 ): Promise<T> {
@@ -148,6 +167,7 @@ async function _run<T>(
   const parentOpts = parentState?.options ?? {};
 
   const state: RunState = {
+    host: h ?? parentState?.host,
     options: { ...parentOpts, ...opts },
   };
 
