@@ -61,9 +61,14 @@ export function resolveOptions(perTask?: TaskOptions): ResolvedOptions {
   };
 }
 
-export function currentPath(): string[] {
-  return runContext.getStore()?.path ?? [];
-}
+export const context = {
+  get host(): Host {
+    return runContext.getStore()?.host ?? DEFAULT_HOST;
+  },
+  get path(): string[] {
+    return runContext.getStore()?.path ?? [];
+  },
+};
 
 function resolveHost(host: Host): {
   inventory: string;
@@ -93,7 +98,7 @@ export async function executeTask(
   const opts = resolveOptions(perTask);
 
   const hostName = opts.host.name;
-  const contextPath = currentPath();
+  const contextPath = context.path;
   const taskPath = taskName ? [...contextPath, taskName] : contextPath;
 
   for (const cb of opts.callbacks)

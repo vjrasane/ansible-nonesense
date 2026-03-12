@@ -3,37 +3,31 @@ import { ping, debug } from "./generated/builtin/index.ts";
 import {
   getInventorySync,
   getInventoryHosts,
-  LocalBackend,
-  host,
   define,
 } from "./packages/core/src/index.ts";
+import { context } from "./packages/core/src/run.ts";
 
-// const inventory = getInventorySync(
-//   path.join(import.meta.dirname, "inventory.yml"),
-// );
-// const hosts = getInventoryHosts(inventory);
+const inventory = getInventorySync(
+  path.join(import.meta.dirname, "inventory.yml"),
+);
+const hosts = getInventoryHosts(inventory);
 
-const localhost = host({
-  name: "localhost",
-  connection: "local",
-});
+const play = define`Play`(async (msg: string) => {
+  await ping`Ping ${context.host.name}`({});
 
-const hosts = [localhost];
-
-const play = define`Play`(async (msg: string, hostname: string) => {
-  await ping`Ping ${hostname}`({});
-
-  const res = await debug`Send message to ${hostname}`({ msg });
-  console.log(JSON.stringify(res, null, 2));
+  const res = await debug`Send message to ${context.host.name}`({ msg });
+  return res.msg;
 });
 
 const main = async () => {
   await Promise.all(
     hosts.map((h) =>
-      h.run(async () => {
-        await play("Hello " + h.name, h.name);
-        await debug`Send message`({ msg: "Hell again!" });
-      }),
+      h.run(
+        define`Running on ${h.name}`(async () => {
+          await play("Hello " + h.name);
+          await debug`Send message`({ msg: "Hell again!" });
+        }),
+      ),
     ),
   );
 };
