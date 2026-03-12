@@ -1,7 +1,15 @@
+export interface Callback {
+  onTaskStart?(module: string, args: Record<string, unknown>): void;
+  onTaskComplete?(module: string, result: TaskResult<Record<string, unknown>>): void;
+  onTaskError?(module: string, error: Error): void;
+}
+
 export interface Options {
   hosts?: string;
   inventory?: string;
   backend?: ExecutionBackend;
+  callbacks?: Callback[];
+  ignoreErrors?: boolean;
   become?: boolean;
   check?: boolean;
   diff?: boolean;

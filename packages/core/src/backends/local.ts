@@ -66,11 +66,13 @@ export class LocalBackend implements ExecutionBackend {
       task.hosts,
       "-m",
       task.module,
-      "-a",
-      JSON.stringify(task.args),
       "--connection",
       "local",
     ];
+
+    if (Object.keys(task.args).length > 0) {
+      args.push("-a", JSON.stringify(task.args));
+    }
 
     if (task.inventory) args.push("-i", task.inventory);
     if (task.become) args.push("--become");

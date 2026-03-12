@@ -6,3 +6,4 @@ dist/
 devenv.lock
 inventory.yml
 inventory.yaml
+*.pyc
