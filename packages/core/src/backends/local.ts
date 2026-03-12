@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import type { ExecutionBackend, TaskPayload, TaskResult } from "../types.ts";
+import type { ExecutionBackend, TaskPayload, BackendResult } from "../types.ts";
 
 const exec = promisify(execFile);
 
@@ -56,7 +56,7 @@ export class LocalBackend implements ExecutionBackend {
 
   async execute(
     task: TaskPayload,
-  ): Promise<TaskResult<Record<string, unknown>>> {
+  ): Promise<BackendResult<Record<string, unknown>>> {
     if (!this._checked) {
       this._checked = checkAnsible(this._ansible);
     }
@@ -112,11 +112,11 @@ export class LocalBackend implements ExecutionBackend {
   }
 }
 
-function parseJsonOutput(stdout: string): TaskResult<Record<string, unknown>> {
+function parseJsonOutput(stdout: string): BackendResult<Record<string, unknown>> {
   const output: AnsibleJsonOutput = JSON.parse(stdout);
 
   const hostsData = output.plays?.[0]?.tasks?.[0]?.hosts ?? {};
-  const result: TaskResult<Record<string, unknown>> = {};
+  const result: BackendResult<Record<string, unknown>> = {};
 
   for (const [hostname, rawData] of Object.entries(hostsData)) {
     const data: Record<string, unknown> = {};

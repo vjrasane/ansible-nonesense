@@ -1,7 +1,7 @@
 export interface Callback {
-  onTaskStart?(module: string, args: Record<string, unknown>): void;
-  onTaskComplete?(module: string, result: TaskResult<Record<string, unknown>>): void;
-  onTaskError?(module: string, error: Error): void;
+  onTaskStart?(host: string, module: string, args: Record<string, unknown>, name?: string): void;
+  onTaskComplete?(host: string, module: string, result: HostResult<Record<string, unknown>>, name?: string): void;
+  onTaskError?(host: string, module: string, error: Error, name?: string): void;
 }
 
 export interface Host {
@@ -10,7 +10,7 @@ export interface Host {
 }
 
 export interface Options {
-  hosts?: Host[];
+  host?: Host;
   backend?: ExecutionBackend;
   callbacks?: Callback[];
   continueOnError?: boolean;
@@ -22,32 +22,17 @@ export interface Options {
   verbosity?: 0 | 1 | 2 | 3 | 4;
 }
 
-export type TaskOptions = Omit<Options, "hosts">;
-
-type HostMap = Record<string, { failed: boolean }>;
-
-export interface RunContext {
-  excludeFailed<T extends HostMap | RunResult<unknown>>(result: T): T;
-  getHosts(): Host[];
-}
-
-export const RUN_RESULT_BRAND = Symbol.for("nonesible.RunResult");
-
-export interface RunResult<T> {
-  readonly [RUN_RESULT_BRAND]: true;
-  value: T;
-  hosts: HostMap;
-}
+export type TaskOptions = Options;
 
 export type HostResult<T> = T & {
   changed: boolean;
   failed: boolean;
 };
 
-export type TaskResult<T> = Record<string, HostResult<T>>;
+export type BackendResult<T> = Record<string, HostResult<T>>;
 
 export interface ExecutionBackend {
-  execute(task: TaskPayload): Promise<TaskResult<Record<string, unknown>>>;
+  execute(task: TaskPayload): Promise<BackendResult<Record<string, unknown>>>;
 }
 
 export interface TaskPayload {

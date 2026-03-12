@@ -3,27 +3,21 @@ import { writeFileSync, rmSync, mkdtempSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
-  RUN_RESULT_BRAND,
   type Options,
   type TaskOptions,
   type Host,
-  type Callback,
-  type RunContext,
-  type RunResult,
-  type ExecutionBackend,
+  type HostResult,
   type TaskPayload,
-  type TaskResult,
 } from "./types.ts";
 import { LocalBackend } from "./backends/local.ts";
 import { consoleCallback } from "./callbacks/console.ts";
 
 interface RunState {
   options: Options;
-  excluded: Set<string>;
 }
 
-const DEFAULTS: Required<Pick<Options, "hosts" | "callbacks">> & Options = {
-  hosts: [{ name: "localhost" }],
+const DEFAULTS: Required<Pick<Options, "host" | "callbacks">> & Options = {
+  host: { name: "localhost" },
   callbacks: [consoleCallback],
 };
 
@@ -34,11 +28,7 @@ export function configure(opts: Options): void {
   globalConfig = { ...globalConfig, ...opts };
 }
 
-export function resolveOptions(perTask?: TaskOptions): Options & {
-  hosts: Host[];
-  callbacks: Callback[];
-  backend: ExecutionBackend;
-} {
+export function resolveOptions(perTask?: TaskOptions): Required<Pick<Options, "host" | "callbacks" | "backend">> & Options {
   const state = runContext.getStore();
   const ctx = state?.options ?? {};
 
@@ -64,65 +54,41 @@ export function resolveOptions(perTask?: TaskOptions): Options & {
   };
 }
 
-function filterExcluded(hosts: Host[]): Host[] {
-  const state = runContext.getStore();
-  if (!state || state.excluded.size === 0) return hosts;
-  return hosts.filter((h) => !state.excluded.has(h.name));
-}
-
-function resolveHosts(hosts: Host[]): {
-  pattern: string;
-  inventory?: string;
+function resolveHost(host: Host): {
+  inventory: string;
   tmpDir?: string;
 } {
-  if (hosts.length === 0) return { pattern: "all", inventory: "," };
-
-  const hasVars = hosts.some((h) => h.vars && Object.keys(h.vars).length > 0);
-
-  if (!hasVars) {
-    return {
-      pattern: "all",
-      inventory: hosts.map((h) => h.name).join(",") + ",",
-    };
+  if (!host.vars || Object.keys(host.vars).length === 0) {
+    return { inventory: host.name + "," };
   }
 
-  const inventoryData: Record<
-    string,
-    Record<string, Record<string, unknown>>
-  > = {
-    all: { hosts: {} },
+  const inventoryData = {
+    all: { hosts: { [host.name]: host.vars } },
   };
-  for (const host of hosts) {
-    inventoryData.all.hosts[host.name] = host.vars ?? {};
-  }
 
   const dir = mkdtempSync(join(tmpdir(), "nonesible-"));
   const path = join(dir, "inventory.json");
   writeFileSync(path, JSON.stringify(inventoryData));
 
-  return { pattern: "all", inventory: path, tmpDir: dir };
+  return { inventory: path, tmpDir: dir };
 }
 
 export async function executeTask(
   module: string,
   args: Record<string, unknown>,
   perTask?: TaskOptions,
-): Promise<TaskResult<Record<string, unknown>>> {
+): Promise<HostResult<Record<string, unknown>>> {
   const opts = resolveOptions(perTask);
-  const activeHosts = filterExcluded(opts.hosts);
 
-  if (activeHosts.length === 0) {
-    return {};
-  }
+  const hostName = opts.host.name;
+  for (const cb of opts.callbacks) cb.onTaskStart?.(hostName, module, args);
 
-  for (const cb of opts.callbacks) cb.onTaskStart?.(module, args);
-
-  const hostInfo = resolveHosts(activeHosts);
+  const hostInfo = resolveHost(opts.host);
 
   const payload: TaskPayload = {
     module,
     args,
-    hosts: hostInfo.pattern,
+    hosts: "all",
     inventory: hostInfo.inventory,
     connection: opts.connection,
     become: opts.become,
@@ -132,11 +98,16 @@ export async function executeTask(
     verbosity: opts.verbosity,
   };
 
-  let result: TaskResult<Record<string, unknown>>;
+  let hostResult: HostResult<Record<string, unknown>>;
   try {
-    result = await opts.backend.execute(payload);
+    const backendResult = await opts.backend.execute(payload);
+    hostResult = backendResult[hostName];
+    if (!hostResult) {
+      const firstKey = Object.keys(backendResult)[0];
+      hostResult = firstKey ? backendResult[firstKey] : { changed: false, failed: true };
+    }
   } catch (error) {
-    for (const cb of opts.callbacks) cb.onTaskError?.(module, error as Error);
+    for (const cb of opts.callbacks) cb.onTaskError?.(hostName, module, error as Error);
     throw error;
   } finally {
     if (hostInfo.tmpDir) {
@@ -144,74 +115,40 @@ export async function executeTask(
     }
   }
 
-  for (const cb of opts.callbacks) cb.onTaskComplete?.(module, result);
+  for (const cb of opts.callbacks) cb.onTaskComplete?.(hostName, module, hostResult);
 
-  if (!opts.continueOnError) {
-    const failed = Object.entries(result).filter(([, r]) => r.failed);
-    if (failed.length > 0) {
-      const hosts = failed.map(([h]) => h).join(", ");
-      throw new Error(`Task ${module} failed on: ${hosts}`);
-    }
+  if (!opts.continueOnError && hostResult.failed) {
+    throw new Error(`Task ${module} failed on: ${hostName}`);
   }
 
-  return result;
+  return hostResult;
 }
 
 export const task = executeTask;
 
-export async function run<T>(
+export interface RunnableHost extends Host {
+  run<T>(fn: () => Promise<T>, opts?: Options): Promise<T>;
+}
+
+export function host(h: Host, defaults?: Options): RunnableHost {
+  return {
+    ...h,
+    run<T>(fn: () => Promise<T>, opts?: Options) {
+      return _run({ ...defaults, ...opts, host: h }, fn);
+    },
+  };
+}
+
+async function _run<T>(
   opts: Options,
-  fn: (ctx: RunContext) => Promise<T>,
-): Promise<RunResult<T>> {
+  fn: () => Promise<T>,
+): Promise<T> {
   const parentState = runContext.getStore();
   const parentOpts = parentState?.options ?? {};
-  const excluded = new Set<string>(parentState?.excluded);
 
   const state: RunState = {
     options: { ...parentOpts, ...opts },
-    excluded,
   };
 
-  const ctx: RunContext = {
-    excludeFailed(result) {
-      const hosts = RUN_RESULT_BRAND in result ? result.hosts : result;
-      for (const [host, data] of Object.entries(hosts)) {
-        if (data.failed) excluded.add(host);
-      }
-      return result;
-    },
-    getHosts() {
-      const hosts = state.options.hosts ?? [];
-      return hosts.filter((h) => !excluded.has(h.name)).map((h) => ({ ...h }));
-    },
-  };
-
-  const value = await runContext.run(state, () => fn(ctx));
-
-  const hosts: Record<string, { failed: boolean }> = {};
-  for (const host of state.options.hosts ?? []) {
-    hosts[host.name] = { failed: excluded.has(host.name) };
-  }
-
-  return { [RUN_RESULT_BRAND]: true as const, value, hosts };
+  return runContext.run(state, () => fn());
 }
-
-interface Compose {
-  <TReturn>(
-    fn: (ctx: RunContext) => Promise<TReturn>,
-  ): (opts?: TaskOptions) => Promise<RunResult<TReturn>>;
-  <TReturn, TInput>(
-    fn: (input: TInput, ctx: RunContext) => Promise<TReturn>,
-  ): (input: TInput, opts?: TaskOptions) => Promise<RunResult<TReturn>>;
-}
-
-export const compose: Compose = (fn: Function) => {
-  return function (...args: any[]) {
-    if (fn.length <= 1) {
-      const [opts] = args;
-      return run(opts ?? {}, (ctx: RunContext) => (fn as any)(ctx));
-    }
-    const [input, opts] = args;
-    return run(opts ?? {}, (ctx: RunContext) => (fn as any)(input, ctx));
-  };
-};

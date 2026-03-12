@@ -1,10 +1,10 @@
 import { execFile, execFileSync } from "node:child_process";
 import { promisify } from "node:util";
-import type { Host } from "./types.ts";
+import { host, type RunnableHost } from "./run.ts";
 
 const exec = promisify(execFile);
 
-export interface InventoryHost extends Host {
+export interface InventoryHost extends RunnableHost {
   groups: string[];
 }
 
@@ -14,8 +14,8 @@ interface InventoryJson {
 }
 
 export async function getInventoryHosts(
-  inventoryPath?: string,
   pattern?: string,
+  inventoryPath?: string,
 ): Promise<InventoryHost[]> {
   const args = ["--list"];
   if (inventoryPath) args.push("-i", inventoryPath);
@@ -28,8 +28,8 @@ export async function getInventoryHosts(
 }
 
 export function getInventoryHostsSync(
-  inventoryPath?: string,
   pattern?: string,
+  inventoryPath?: string,
 ): InventoryHost[] {
   const args = ["--list"];
   if (inventoryPath) args.push("-i", inventoryPath);
@@ -60,19 +60,20 @@ function parseInventory(stdout: string, pattern?: string): InventoryHost[] {
 
   const allHosts: InventoryHost[] = [];
   for (const [name, vars] of Object.entries(hostvars)) {
-    allHosts.push({ name, vars, groups: hostGroups.get(name) ?? [] });
+    const groups = hostGroups.get(name) ?? [];
+    allHosts.push({ ...host({ name, vars }), groups });
   }
 
   if (!pattern) return allHosts;
 
   const patterns = pattern.split(",").map((p) => p.trim());
-  return allHosts.filter((host) =>
+  return allHosts.filter((h) =>
     patterns.some(
       (p) =>
         p === "all" ||
-        host.name === p ||
-        host.groups.includes(p) ||
-        globMatch(host.name, p),
+        h.name === p ||
+        h.groups.includes(p) ||
+        globMatch(h.name, p),
     ),
   );
 }

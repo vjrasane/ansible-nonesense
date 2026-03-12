@@ -1,18 +1,15 @@
 export type {
   Options,
   HostResult,
-  TaskResult,
+  BackendResult,
   TaskPayload,
   ExecutionBackend,
   Callback,
   Host,
   TaskOptions,
-  RunContext,
-  RunResult,
 } from "./types.ts";
-export { RUN_RESULT_BRAND } from "./types.ts";
 export { defineModule, type ModuleFunction } from "./module.ts";
-export { run, configure, compose } from "./run.ts";
+export { configure, host, type RunnableHost } from "./run.ts";
 export { DryRunBackend } from "./backends/dryrun.ts";
 export { LocalBackend } from "./backends/local.ts";
 export { consoleCallback } from "./callbacks/console.ts";
