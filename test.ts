@@ -1,20 +1,26 @@
 import path from "node:path";
 import { ping, debug } from "./generated/builtin/index.ts";
-import { configure, compose } from "./packages/core/src/run.ts";
+import {
+  getInventorySync,
+  getInventoryHosts,
+} from "./packages/core/src/index.ts";
 
-const inventory = path.join(import.meta.dirname, "inventory.yml");
+const inventory = getInventorySync(
+  path.join(import.meta.dirname, "inventory.yml"),
+);
+const hosts = getInventoryHosts(inventory);
 
-configure({ inventory, hosts: "all" });
+const play = async (msg: string, hostname: string) => {
+  await ping`Ping ${hostname}`({});
 
-const play = compose(async (msg: string) => {
-  await ping({});
-
-  const res = await debug({ msg });
+  const res = await debug`Send message to ${hostname}`({ msg });
   console.log(JSON.stringify(res, null, 2));
-});
+};
 
 const main = async () => {
-  await play("Hello play!");
+  await Promise.all(
+    hosts.map((h) => h.run(() => play("Hello " + h.name, h.name))),
+  );
 };
 
 main();

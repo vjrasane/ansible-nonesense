@@ -14,4 +14,4 @@ export { DryRunBackend } from "./backends/dryrun.ts";
 export { LocalBackend, type LocalBackendOptions } from "./backends/local.ts";
 export { consoleCallback } from "./callbacks/console.ts";
 export { logCallback } from "./callbacks/log.ts";
-export { getInventoryHosts, getInventoryHostsSync, type InventoryHost } from "./inventory.ts";
+export { getInventory, getInventorySync, getInventoryHosts, type InventoryData, type InventoryHost } from "./inventory.ts";

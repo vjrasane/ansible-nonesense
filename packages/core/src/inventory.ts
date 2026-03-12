@@ -8,15 +8,12 @@ export interface InventoryHost extends RunnableHost {
   groups: string[];
 }
 
-interface InventoryJson {
+export interface InventoryData {
   _meta: { hostvars: Record<string, Record<string, unknown>> };
   [group: string]: { hosts?: string[]; children?: string[] } | unknown;
 }
 
-export async function getInventoryHosts(
-  pattern?: string,
-  inventoryPath?: string,
-): Promise<InventoryHost[]> {
+export async function getInventory(inventoryPath?: string): Promise<InventoryData> {
   const args = ["--list"];
   if (inventoryPath) args.push("-i", inventoryPath);
 
@@ -24,13 +21,10 @@ export async function getInventoryHosts(
     env: { ...process.env, ANSIBLE_DEPRECATION_WARNINGS: "false" },
   });
 
-  return parseInventory(stdout, pattern);
+  return JSON.parse(stdout);
 }
 
-export function getInventoryHostsSync(
-  pattern?: string,
-  inventoryPath?: string,
-): InventoryHost[] {
+export function getInventorySync(inventoryPath?: string): InventoryData {
   const args = ["--list"];
   if (inventoryPath) args.push("-i", inventoryPath);
 
@@ -39,22 +33,24 @@ export function getInventoryHostsSync(
     encoding: "utf-8",
   });
 
-  return parseInventory(stdout, pattern);
+  return JSON.parse(stdout);
 }
 
-function parseInventory(stdout: string, pattern?: string): InventoryHost[] {
-  const data: InventoryJson = JSON.parse(stdout);
-  const hostvars = data._meta.hostvars;
+export function getInventoryHosts(
+  inventory: InventoryData,
+  ...patterns: string[]
+): InventoryHost[] {
+  const hostvars = inventory._meta.hostvars;
 
   const hostGroups = new Map<string, string[]>();
-  for (const [group, value] of Object.entries(data)) {
+  for (const [group, value] of Object.entries(inventory)) {
     if (group === "_meta") continue;
     const hosts = (value as { hosts?: string[] }).hosts;
     if (!hosts) continue;
-    for (const host of hosts) {
-      const groups = hostGroups.get(host) ?? [];
+    for (const h of hosts) {
+      const groups = hostGroups.get(h) ?? [];
       groups.push(group);
-      hostGroups.set(host, groups);
+      hostGroups.set(h, groups);
     }
   }
 
@@ -64,9 +60,8 @@ function parseInventory(stdout: string, pattern?: string): InventoryHost[] {
     allHosts.push({ ...host({ name, vars }), groups });
   }
 
-  if (!pattern) return allHosts;
+  if (patterns.length === 0) return allHosts;
 
-  const patterns = pattern.split(",").map((p) => p.trim());
   return allHosts.filter((h) =>
     patterns.some(
       (p) =>
