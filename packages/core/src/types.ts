@@ -11,7 +11,6 @@ export interface Host {
 }
 
 export interface Options {
-  name?: string;
   backend?: ExecutionBackend;
   callbacks?: Callback[];
   continueOnError?: boolean;

@@ -8,7 +8,7 @@ import {
   stat,
 } from "../../../generated/builtin/index.ts";
 import { DryRunBackend } from "./backends/dryrun.ts";
-import { configure, host, run } from "./run.ts";
+import { configure, host, run, define } from "./run.ts";
 
 describe("module", () => {
   let backend: DryRunBackend;
@@ -161,6 +161,58 @@ describe("module", () => {
 
       expect(paths[0]).toEqual(["Setup", "Install packages", "Install nginx"]);
       expect(paths[1]).toEqual(["Setup", "Deploy config"]);
+    });
+
+    it("define creates reusable named block", async () => {
+      const paths: string[][] = [];
+      const cb = { onTaskStart(_h: string, _m: string, _a: Record<string, unknown>, path: string[]) { paths.push(path); } };
+      configure({ callbacks: [cb], backend });
+
+      const installNginx = define`Install nginx`(async () => {
+        await apt`Install package`({ name: "nginx", state: "present" });
+        await service`Enable service`({ name: "nginx", state: "started" });
+      });
+
+      await host({ name: "web01" }).run`Setup`(installNginx);
+
+      expect(paths[0]).toEqual(["Setup", "Install nginx", "Install package"]);
+      expect(paths[1]).toEqual(["Setup", "Install nginx", "Enable service"]);
+    });
+
+    it("define with options", async () => {
+      const installPkgs = define`Install packages`({ become: true }, async () => {
+        await apt`Install nginx`({ name: "nginx", state: "present" });
+      });
+
+      await host({ name: "web01" }).run(installPkgs);
+
+      expect(backend.executed[0].become).toBe(true);
+    });
+
+    it("define preserves function arguments", async () => {
+      const installPkg = define`Install`(async (name: string, version?: string) => {
+        await apt`Install package`({ name, state: version ?? "present" });
+      });
+
+      await host({ name: "web01" }).run(async () => {
+        await installPkg("nginx");
+        await installPkg("curl", "latest");
+      });
+
+      expect(backend.executed[0].args.name).toBe("nginx");
+      expect(backend.executed[0].args.state).toBe("present");
+      expect(backend.executed[1].args.name).toBe("curl");
+      expect(backend.executed[1].args.state).toBe("latest");
+    });
+
+    it("define without tag bundles options", async () => {
+      const privileged = define({ become: true }, async () => {
+        await apt`Install nginx`({ name: "nginx", state: "present" });
+      });
+
+      await host({ name: "web01" }).run(privileged);
+
+      expect(backend.executed[0].become).toBe(true);
     });
   });
 

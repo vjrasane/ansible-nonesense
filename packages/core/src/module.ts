@@ -10,11 +10,6 @@ export interface ModuleFunction<TArgs, TReturn> {
 }
 
 export function defineModule<TArgs, TReturn>(module: string): ModuleFunction<TArgs, TReturn> {
-  function run(args: TArgs, opts?: TaskOptions): Promise<HostResult<TReturn>> {
-    const result = executeTask(module, args as Record<string, unknown>, opts);
-    return result as Promise<HostResult<TReturn>>;
-  }
-
   function moduleFn(
     argsOrStrings: TArgs | TemplateStringsArray,
     ...rest: unknown[]
@@ -25,9 +20,13 @@ export function defineModule<TArgs, TReturn>(module: string): ModuleFunction<TAr
         ...rest,
       );
       return (args: TArgs, opts?: TaskOptions) =>
-        run(args, { ...opts, name });
+        executeTask(module, args as Record<string, unknown>, opts, name) as Promise<HostResult<TReturn>>;
     }
-    return run(argsOrStrings as TArgs, rest[0] as TaskOptions | undefined);
+    return executeTask(
+      module,
+      argsOrStrings as Record<string, unknown>,
+      rest[0] as TaskOptions | undefined,
+    ) as Promise<HostResult<TReturn>>;
   }
 
   return moduleFn as ModuleFunction<TArgs, TReturn>;
