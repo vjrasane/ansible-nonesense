@@ -16,6 +16,7 @@ export interface Callback {
 
 export interface Host {
   readonly name: string;
+  readonly connection?: string;
   readonly vars?: Readonly<Record<string, unknown>>;
 }
 

@@ -17,7 +17,7 @@ interface RunState {
 }
 
 const DEFAULTS: Required<Pick<Options, "host" | "callbacks">> & Options = {
-  host: { name: "localhost" },
+  host: { name: "localhost", connection: "local" },
   callbacks: [consoleCallback],
 };
 
@@ -91,7 +91,7 @@ export async function executeTask(
     args,
     hosts: "all",
     inventory: hostInfo.inventory,
-    connection: opts.connection,
+    connection: opts.host.connection,
     become: opts.become,
     check: opts.check,
     diff: opts.diff,

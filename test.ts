@@ -3,12 +3,21 @@ import { ping, debug } from "./generated/builtin/index.ts";
 import {
   getInventorySync,
   getInventoryHosts,
+  LocalBackend,
+  host,
 } from "./packages/core/src/index.ts";
 
-const inventory = getInventorySync(
-  path.join(import.meta.dirname, "inventory.yml"),
-);
-const hosts = getInventoryHosts(inventory);
+// const inventory = getInventorySync(
+//   path.join(import.meta.dirname, "inventory.yml"),
+// );
+// const hosts = getInventoryHosts(inventory);
+
+const localhost = host({
+  name: "localhost",
+  connection: "local",
+});
+
+const hosts = [localhost];
 
 const play = async (msg: string, hostname: string) => {
   await ping`Ping ${hostname}`({});
