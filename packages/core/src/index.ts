@@ -10,6 +10,7 @@ export type {
   RunContext,
   RunResult,
 } from "./types.ts";
+export { RUN_RESULT_BRAND } from "./types.ts";
 export { defineModule, type ModuleFunction } from "./module.ts";
 export { run, configure, compose } from "./run.ts";
 export { DryRunBackend } from "./backends/dryrun.ts";

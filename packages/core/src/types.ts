@@ -10,8 +10,7 @@ export interface Host {
 }
 
 export interface Options {
-  hosts?: string | Host[];
-  inventory?: string;
+  hosts?: Host[];
   backend?: ExecutionBackend;
   callbacks?: Callback[];
   continueOnError?: boolean;
@@ -23,16 +22,21 @@ export interface Options {
   verbosity?: 0 | 1 | 2 | 3 | 4;
 }
 
-export type TaskOptions = Omit<Options, "hosts" | "inventory">;
+export type TaskOptions = Omit<Options, "hosts">;
+
+type HostMap = Record<string, { failed: boolean }>;
 
 export interface RunContext {
-  excludeFailed<T extends Record<string, { failed: boolean }>>(result: T): T;
+  excludeFailed<T extends HostMap | RunResult<unknown>>(result: T): T;
   getHosts(): Host[];
 }
 
+export const RUN_RESULT_BRAND = Symbol.for("nonesible.RunResult");
+
 export interface RunResult<T> {
+  readonly [RUN_RESULT_BRAND]: true;
   value: T;
-  hosts: Record<string, { failed: boolean }>;
+  hosts: HostMap;
 }
 
 export type HostResult<T> = T & {

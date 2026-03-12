@@ -1,6 +1,5 @@
 import { execFile, execFileSync } from "node:child_process";
 import { promisify } from "node:util";
-import { resolveOptions } from "./run.ts";
 import type { Host } from "./types.ts";
 
 const exec = promisify(execFile);
@@ -15,12 +14,11 @@ interface InventoryJson {
 }
 
 export async function getInventoryHosts(
-  pattern?: string,
   inventoryPath?: string,
+  pattern?: string,
 ): Promise<InventoryHost[]> {
-  const effectivePath = inventoryPath ?? resolveOptions().inventory;
   const args = ["--list"];
-  if (effectivePath) args.push("-i", effectivePath);
+  if (inventoryPath) args.push("-i", inventoryPath);
 
   const { stdout } = await exec("ansible-inventory", args, {
     env: { ...process.env, ANSIBLE_DEPRECATION_WARNINGS: "false" },
@@ -30,12 +28,11 @@ export async function getInventoryHosts(
 }
 
 export function getInventoryHostsSync(
-  pattern?: string,
   inventoryPath?: string,
+  pattern?: string,
 ): InventoryHost[] {
-  const effectivePath = inventoryPath ?? resolveOptions().inventory;
   const args = ["--list"];
-  if (effectivePath) args.push("-i", effectivePath);
+  if (inventoryPath) args.push("-i", inventoryPath);
 
   const stdout = execFileSync("ansible-inventory", args, {
     env: { ...process.env, ANSIBLE_DEPRECATION_WARNINGS: "false" },
