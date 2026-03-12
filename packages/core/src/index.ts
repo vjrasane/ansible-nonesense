@@ -11,3 +11,4 @@ export { run, configure } from "./run.ts";
 export { DryRunBackend } from "./backends/dryrun.ts";
 export { LocalBackend } from "./backends/local.ts";
 export { consoleCallback } from "./callbacks/console.ts";
+export { logCallback } from "./callbacks/log.ts";
