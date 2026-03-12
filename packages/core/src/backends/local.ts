@@ -1,6 +1,10 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import type { ExecutionBackend, TaskPayload, BackendResult } from "../types.ts";
+import { writeFileSync, rmSync, mkdtempSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import type { Host, TaskPayload, BackendResult } from "../types.ts";
+import { Backend } from "../backend-context.ts";
 
 const exec = promisify(execFile);
 
@@ -77,17 +81,18 @@ export interface LocalBackendOptions {
   concurrency?: number;
 }
 
-export class LocalBackend implements ExecutionBackend {
+export class LocalBackend extends Backend {
   private _checked: Promise<void> | undefined;
   private _ansible: string;
   private _semaphore: Semaphore;
 
   constructor(opts: LocalBackendOptions = {}) {
+    super();
     this._ansible = opts.ansible ?? "ansible";
     this._semaphore = new Semaphore(opts.concurrency ?? 10);
   }
 
-  async execute(
+  async executeTask(
     task: TaskPayload,
   ): Promise<BackendResult<Record<string, unknown>>> {
     if (!this._checked) {
@@ -106,54 +111,78 @@ export class LocalBackend implements ExecutionBackend {
   private async _run(
     task: TaskPayload,
   ): Promise<BackendResult<Record<string, unknown>>> {
-    const args = [
-      task.hosts,
-      "-m",
-      task.module,
-    ];
+    const { inventory, tmpDir } = resolveHost(task.host);
 
-    if (Object.keys(task.args).length > 0) {
-      args.push("-a", JSON.stringify(task.args));
-    }
-
-    if (task.inventory) args.push("-i", task.inventory);
-    if (task.connection) args.push("--connection", task.connection);
-    if (task.become) args.push("--become");
-    if (task.check) args.push("--check");
-    if (task.diff) args.push("--diff");
-
-    if (task.extraVars) {
-      args.push("-e", JSON.stringify(task.extraVars));
-    }
-
-    if (task.verbosity) {
-      args.push(`-${"v".repeat(task.verbosity)}`);
-    }
-
-    const env = {
-      ...process.env,
-      ANSIBLE_LOAD_CALLBACK_PLUGINS: "true",
-      ANSIBLE_STDOUT_CALLBACK: "json",
-      ANSIBLE_DEPRECATION_WARNINGS: "false",
-    };
-
-    let stdout: string;
     try {
-      const result = await exec(this._ansible, args, { env });
-      stdout = result.stdout;
-    } catch (err: unknown) {
-      const e = err as { stdout?: string; stderr?: string; code?: number };
-      if (e.stdout) {
-        stdout = e.stdout;
-      } else {
-        throw new Error(
-          `ansible failed (exit ${e.code}): ${e.stderr ?? "unknown error"}`,
-        );
+      const args = [
+        "all",
+        "-m",
+        task.module,
+      ];
+
+      if (Object.keys(task.args).length > 0) {
+        args.push("-a", JSON.stringify(task.args));
+      }
+
+      args.push("-i", inventory);
+      if (task.host.connection) args.push("--connection", task.host.connection);
+      if (task.become) args.push("--become");
+      if (task.check) args.push("--check");
+      if (task.diff) args.push("--diff");
+
+      if (task.extraVars) {
+        args.push("-e", JSON.stringify(task.extraVars));
+      }
+
+      if (task.verbosity) {
+        args.push(`-${"v".repeat(task.verbosity)}`);
+      }
+
+      const env = {
+        ...process.env,
+        ANSIBLE_LOAD_CALLBACK_PLUGINS: "true",
+        ANSIBLE_STDOUT_CALLBACK: "json",
+        ANSIBLE_DEPRECATION_WARNINGS: "false",
+      };
+
+      let stdout: string;
+      try {
+        const result = await exec(this._ansible, args, { env });
+        stdout = result.stdout;
+      } catch (err: unknown) {
+        const e = err as { stdout?: string; stderr?: string; code?: number };
+        if (e.stdout) {
+          stdout = e.stdout;
+        } else {
+          throw new Error(
+            `ansible failed (exit ${e.code}): ${e.stderr ?? "unknown error"}`,
+          );
+        }
+      }
+
+      return parseJsonOutput(stdout);
+    } finally {
+      if (tmpDir) {
+        rmSync(tmpDir, { recursive: true, force: true });
       }
     }
-
-    return parseJsonOutput(stdout);
   }
+}
+
+function resolveHost(host: Host): { inventory: string; tmpDir?: string } {
+  if (!host.vars || Object.keys(host.vars).length === 0) {
+    return { inventory: host.name + "," };
+  }
+
+  const inventoryData = {
+    all: { hosts: { [host.name]: host.vars } },
+  };
+
+  const dir = mkdtempSync(join(tmpdir(), "nonesible-"));
+  const path = join(dir, "inventory.json");
+  writeFileSync(path, JSON.stringify(inventoryData));
+
+  return { inventory: path, tmpDir: dir };
 }
 
 function parseJsonOutput(stdout: string): BackendResult<Record<string, unknown>> {

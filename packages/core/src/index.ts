@@ -9,9 +9,23 @@ export type {
   TaskOptions,
 } from "./types.ts";
 export { defineModule, type ModuleFunction } from "./module.ts";
-export { configure, run, define, host, context, type RunnableHost } from "./run.ts";
+export { run, define, host, type RunnableHost } from "./run.ts";
+export { context } from "./context.ts";
+export { Backend } from "./backend-context.ts";
 export { DryRunBackend } from "./backends/dryrun.ts";
 export { LocalBackend, type LocalBackendOptions } from "./backends/local.ts";
 export { consoleCallback } from "./callbacks/console.ts";
 export { logCallback } from "./callbacks/log.ts";
-export { getInventory, getInventorySync, getInventoryHosts, type InventoryData, type InventoryHost } from "./inventory.ts";
+export {
+  getInventory,
+  getInventorySync,
+  getInventoryHosts,
+  type InventoryData,
+  type InventoryHost,
+} from "./inventory.ts";
+
+interface Context {
+  host: Host;
+  path: string[];
+  log(message: string): void;
+}

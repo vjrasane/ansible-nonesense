@@ -12,7 +12,6 @@ export interface Host {
 }
 
 export interface Options {
-  backend?: ExecutionBackend;
   callbacks?: Callback[];
   continueOnError?: boolean;
   connection?: string;
@@ -33,15 +32,13 @@ export type HostResult<T> = T & {
 export type BackendResult<T> = Record<string, HostResult<T>>;
 
 export interface ExecutionBackend {
-  execute(task: TaskPayload): Promise<BackendResult<Record<string, unknown>>>;
+  execute<T>(fn: () => Promise<T>): Promise<T>;
 }
 
 export interface TaskPayload {
   module: string;
   args: Record<string, unknown>;
-  hosts: string;
-  inventory?: string;
-  connection?: string;
+  host: Host;
   become?: boolean;
   check?: boolean;
   diff?: boolean;

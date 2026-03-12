@@ -8,39 +8,43 @@ import {
   stat,
 } from "../../../generated/builtin/index.ts";
 import { DryRunBackend } from "./backends/dryrun.ts";
-import { configure, host, run, define } from "./run.ts";
+import { host, run, define } from "./run.ts";
 
 describe("module", () => {
   let backend: DryRunBackend;
   beforeEach(() => {
     backend = new DryRunBackend();
-    configure({ callbacks: [], backend });
   });
 
   describe("standalone execution", () => {
-    it("works without host().run() using global config", async () => {
+    it("works without host().run() using default backend", async () => {
       const backend = new DryRunBackend([
         { localhost: { changed: true, failed: false, dest: "/tmp/foo" } },
       ]);
-      configure({ callbacks: [], backend });
 
-      const result = await copy({ dest: "/tmp/foo", src: "./foo" });
-      expect(result.changed).toBe(true);
-      expect(result.dest).toBe("/tmp/foo");
-      expect(backend.executed[0].module).toBe("ansible.builtin.copy");
-      expect(backend.executed[0].inventory).toBe("localhost,");
+      await backend.execute(async () => {
+        const result = await copy({ dest: "/tmp/foo", src: "./foo" });
+        expect(result.changed).toBe(true);
+        expect(result.dest).toBe("/tmp/foo");
+        expect(backend.executed[0].module).toBe("ansible.builtin.copy");
+        expect(backend.executed[0].host.name).toBe("localhost");
+      });
     });
 
     it("per-task host override via host().run()", async () => {
-      await host({ name: "web01" }).run(async () => {
-        await debug({ msg: "hello" });
+      await backend.execute(async () => {
+        await host({ name: "web01" }).run(async () => {
+          await debug({ msg: "hello" });
+        });
       });
 
-      expect(backend.executed[0].inventory).toBe("web01,");
+      expect(backend.executed[0].host.name).toBe("web01");
     });
 
     it("per-task options override defaults", async () => {
-      await debug({ msg: "hello" }, { become: true });
+      await backend.execute(async () => {
+        await debug({ msg: "hello" }, { become: true });
+      });
 
       expect(backend.executed[0].become).toBe(true);
     });
@@ -50,13 +54,15 @@ describe("module", () => {
     it("sets shared options for all tasks", async () => {
       const web01 = host({ name: "web01" }, { become: true });
 
-      await web01.run(async () => {
-        await debug({ msg: "hello" });
-        await copy({ dest: "/tmp/foo" });
+      await backend.execute(async () => {
+        await web01.run(async () => {
+          await debug({ msg: "hello" });
+          await copy({ dest: "/tmp/foo" });
+        });
       });
 
       for (const task of backend.executed) {
-        expect(task.inventory).toBe("web01,");
+        expect(task.host.name).toBe("web01");
         expect(task.become).toBe(true);
       }
     });
@@ -64,47 +70,54 @@ describe("module", () => {
     it("per-task options override host context", async () => {
       const web01 = host({ name: "web01" }, { become: false });
 
-      await web01.run(async () => {
-        await copy({ dest: "/tmp/foo" }, { become: true });
+      await backend.execute(async () => {
+        await web01.run(async () => {
+          await copy({ dest: "/tmp/foo" }, { become: true });
+        });
       });
 
       expect(backend.executed[0].become).toBe(true);
     });
 
-    it("host with vars generates inventory file", async () => {
+    it("host with vars passes them through in payload", async () => {
       const web01 = host({ name: "web01", vars: { ansible_port: 2222 } });
 
-      await web01.run(async () => {
-        await debug({ msg: "hello" });
+      await backend.execute(async () => {
+        await web01.run(async () => {
+          await debug({ msg: "hello" });
+        });
       });
 
-      const inventory = backend.executed[0].inventory!;
-      expect(inventory).not.toBe("web01,");
-      expect(inventory).toContain("nonesible-");
+      expect(backend.executed[0].host.name).toBe("web01");
+      expect(backend.executed[0].host.vars).toEqual({ ansible_port: 2222 });
     });
 
     it("fan-out with host().run()", async () => {
       const hosts = [{ name: "web01" }, { name: "web02" }].map((h) => host(h));
 
-      await Promise.all(hosts.map((h) =>
-        h.run(async () => {
-          await copy({ dest: "/tmp/foo" });
-        }),
-      ));
+      await backend.execute(async () => {
+        await Promise.all(hosts.map((h) =>
+          h.run(async () => {
+            await copy({ dest: "/tmp/foo" });
+          }),
+        ));
+      });
 
       expect(backend.executed).toHaveLength(2);
-      expect(backend.executed.map((t) => t.inventory).sort()).toEqual([
-        "web01,",
-        "web02,",
+      expect(backend.executed.map((t) => t.host.name).sort()).toEqual([
+        "web01",
+        "web02",
       ]);
     });
 
     it("run-level options can be passed to host().run()", async () => {
       const web01 = host({ name: "web01" });
 
-      await web01.run(async () => {
-        await debug({ msg: "hello" });
-      }, { become: true });
+      await backend.execute(async () => {
+        await web01.run(async () => {
+          await debug({ msg: "hello" });
+        }, { become: true });
+      });
 
       expect(backend.executed[0].become).toBe(true);
     });
@@ -114,17 +127,22 @@ describe("module", () => {
     it("passes task path through tagged template", async () => {
       const paths: string[][] = [];
       const cb = { onTaskStart(_h: string, _m: string, _a: Record<string, unknown>, path: string[]) { paths.push(path); } };
-      configure({ callbacks: [cb], backend });
 
-      await copy`Deploy config`({ dest: "/tmp/foo" });
-      await copy({ dest: "/tmp/bar" });
+      await backend.execute(async () => {
+        await run({ callbacks: [cb] }, async () => {
+          await copy`Deploy config`({ dest: "/tmp/foo" });
+          await copy({ dest: "/tmp/bar" });
+        });
+      });
 
       expect(paths).toEqual([["Deploy config"], []]);
     });
 
     it("tagged template preserves module behavior", async () => {
-      const namedCopy = copy`Install app`;
-      await namedCopy({ dest: "/tmp/foo" });
+      await backend.execute(async () => {
+        const namedCopy = copy`Install app`;
+        await namedCopy({ dest: "/tmp/foo" });
+      });
 
       expect(backend.executed[0].module).toBe("ansible.builtin.copy");
       expect(backend.executed[0].args.dest).toBe("/tmp/foo");
@@ -134,15 +152,20 @@ describe("module", () => {
       const env = "production";
       const paths: string[][] = [];
       const cb = { onTaskStart(_h: string, _m: string, _a: Record<string, unknown>, path: string[]) { paths.push(path); } };
-      configure({ callbacks: [cb], backend });
 
-      await copy`Deploy ${env} config`({ dest: "/tmp/foo" });
+      await backend.execute(async () => {
+        await run({ callbacks: [cb] }, async () => {
+          await copy`Deploy ${env} config`({ dest: "/tmp/foo" });
+        });
+      });
 
       expect(paths[0]).toEqual(["Deploy production config"]);
     });
 
     it("tagged template merges with per-task options", async () => {
-      await copy`Install`({ dest: "/tmp/foo" }, { become: true });
+      await backend.execute(async () => {
+        await copy`Install`({ dest: "/tmp/foo" }, { become: true });
+      });
 
       expect(backend.executed[0].become).toBe(true);
     });
@@ -150,13 +173,16 @@ describe("module", () => {
     it("nested run contexts build hierarchical path", async () => {
       const paths: string[][] = [];
       const cb = { onTaskStart(_h: string, _m: string, _a: Record<string, unknown>, path: string[]) { paths.push(path); } };
-      configure({ callbacks: [cb], backend });
 
-      await host({ name: "web01" }).run`Setup`(async () => {
-        await run`Install packages`(async () => {
-          await apt`Install nginx`({ name: "nginx", state: "present" });
+      await backend.execute(async () => {
+        await run({ callbacks: [cb] }, async () => {
+          await host({ name: "web01" }).run`Setup`(async () => {
+            await run`Install packages`(async () => {
+              await apt`Install nginx`({ name: "nginx", state: "present" });
+            });
+            await copy`Deploy config`({ dest: "/tmp/foo" });
+          });
         });
-        await copy`Deploy config`({ dest: "/tmp/foo" });
       });
 
       expect(paths[0]).toEqual(["Setup", "Install packages", "Install nginx"]);
@@ -166,37 +192,44 @@ describe("module", () => {
     it("define creates reusable named block", async () => {
       const paths: string[][] = [];
       const cb = { onTaskStart(_h: string, _m: string, _a: Record<string, unknown>, path: string[]) { paths.push(path); } };
-      configure({ callbacks: [cb], backend });
 
-      const installNginx = define`Install nginx`(async () => {
-        await apt`Install package`({ name: "nginx", state: "present" });
-        await service`Enable service`({ name: "nginx", state: "started" });
+      await backend.execute(async () => {
+        await run({ callbacks: [cb] }, async () => {
+          const installNginx = define`Install nginx`(async () => {
+            await apt`Install package`({ name: "nginx", state: "present" });
+            await service`Enable service`({ name: "nginx", state: "started" });
+          });
+
+          await host({ name: "web01" }).run`Setup`(installNginx);
+        });
       });
-
-      await host({ name: "web01" }).run`Setup`(installNginx);
 
       expect(paths[0]).toEqual(["Setup", "Install nginx", "Install package"]);
       expect(paths[1]).toEqual(["Setup", "Install nginx", "Enable service"]);
     });
 
     it("define with options", async () => {
-      const installPkgs = define`Install packages`({ become: true }, async () => {
-        await apt`Install nginx`({ name: "nginx", state: "present" });
-      });
+      await backend.execute(async () => {
+        const installPkgs = define`Install packages`({ become: true }, async () => {
+          await apt`Install nginx`({ name: "nginx", state: "present" });
+        });
 
-      await host({ name: "web01" }).run(installPkgs);
+        await host({ name: "web01" }).run(installPkgs);
+      });
 
       expect(backend.executed[0].become).toBe(true);
     });
 
     it("define preserves function arguments", async () => {
-      const installPkg = define`Install`(async (name: string, version?: string) => {
-        await apt`Install package`({ name, state: version ?? "present" });
-      });
+      await backend.execute(async () => {
+        const installPkg = define`Install`(async (name: string, version?: string) => {
+          await apt`Install package`({ name, state: version ?? "present" });
+        });
 
-      await host({ name: "web01" }).run(async () => {
-        await installPkg("nginx");
-        await installPkg("curl", "latest");
+        await host({ name: "web01" }).run(async () => {
+          await installPkg("nginx");
+          await installPkg("curl", "latest");
+        });
       });
 
       expect(backend.executed[0].args.name).toBe("nginx");
@@ -206,11 +239,13 @@ describe("module", () => {
     });
 
     it("define without tag bundles options", async () => {
-      const privileged = define({ become: true }, async () => {
-        await apt`Install nginx`({ name: "nginx", state: "present" });
-      });
+      await backend.execute(async () => {
+        const privileged = define({ become: true }, async () => {
+          await apt`Install nginx`({ name: "nginx", state: "present" });
+        });
 
-      await host({ name: "web01" }).run(privileged);
+        await host({ name: "web01" }).run(privileged);
+      });
 
       expect(backend.executed[0].become).toBe(true);
     });
@@ -223,11 +258,13 @@ describe("module", () => {
         { localhost: { changed: false, failed: false } },
       ]);
 
-      await host({ name: "localhost" }).run(async () => {
-        const result = await copy({ dest: "/tmp/foo", content: "new" }, { backend });
-        if (result.changed) {
-          await service({ name: "myapp", state: "restarted" }, { backend });
-        }
+      await backend.execute(async () => {
+        await host({ name: "localhost" }).run(async () => {
+          const result = await copy({ dest: "/tmp/foo", content: "new" });
+          if (result.changed) {
+            await service({ name: "myapp", state: "restarted" });
+          }
+        });
       });
 
       expect(backend.executed).toHaveLength(2);
@@ -239,11 +276,13 @@ describe("module", () => {
         { localhost: { changed: false, failed: false } },
       ]);
 
-      await host({ name: "localhost" }).run(async () => {
-        const result = await copy({ dest: "/tmp/foo", content: "same" }, { backend });
-        if (result.changed) {
-          await service({ name: "myapp", state: "restarted" }, { backend });
-        }
+      await backend.execute(async () => {
+        await host({ name: "localhost" }).run(async () => {
+          const result = await copy({ dest: "/tmp/foo", content: "same" });
+          if (result.changed) {
+            await service({ name: "myapp", state: "restarted" });
+          }
+        });
       });
 
       expect(backend.executed).toHaveLength(1);
@@ -252,11 +291,13 @@ describe("module", () => {
     it("loops in pure typescript", async () => {
       const backend = new DryRunBackend();
 
-      await host({ name: "localhost" }).run(async () => {
-        for (const pkg of ["nginx", "curl", "git"]) {
-          await apt({ name: pkg, state: "present" });
-        }
-      }, { backend, callbacks: [] });
+      await backend.execute(async () => {
+        await host({ name: "localhost" }).run(async () => {
+          for (const pkg of ["nginx", "curl", "git"]) {
+            await apt({ name: pkg, state: "present" });
+          }
+        }, { callbacks: [] });
+      });
 
       expect(backend.executed).toHaveLength(3);
       expect(backend.executed.map((t) => t.args.name)).toEqual([
@@ -274,11 +315,13 @@ describe("module", () => {
         { localhost: { changed: true, failed: false } },
       ]);
 
-      await host({ name: "localhost" }).run(async () => {
-        const check = await stat({ path: "/etc/app.conf" }, { backend });
-        if (!check.stat?.exists) {
-          await copy({ dest: "/etc/app.conf", content: "defaults" }, { backend });
-        }
+      await backend.execute(async () => {
+        await host({ name: "localhost" }).run(async () => {
+          const check = await stat({ path: "/etc/app.conf" });
+          if (!check.stat?.exists) {
+            await copy({ dest: "/etc/app.conf", content: "defaults" });
+          }
+        });
       });
 
       expect(backend.executed).toHaveLength(2);
@@ -286,11 +329,13 @@ describe("module", () => {
     });
 
     it("multiple modules in sequence", async () => {
-      await host({ name: "web01" }).run(async () => {
-        await file({ path: "/opt/app", state: "directory", owner: "deploy" });
-        await copy({ dest: "/opt/app/config.yml", content: "port: 8080" });
-        await service({ name: "myapp", state: "restarted" });
-      }, { become: true });
+      await backend.execute(async () => {
+        await host({ name: "web01" }).run(async () => {
+          await file({ path: "/opt/app", state: "directory", owner: "deploy" });
+          await copy({ dest: "/opt/app/config.yml", content: "port: 8080" });
+          await service({ name: "myapp", state: "restarted" });
+        }, { become: true });
+      });
 
       expect(backend.executed).toHaveLength(3);
       expect(backend.executed[0].module).toBe("ansible.builtin.file");

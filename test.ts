@@ -4,8 +4,9 @@ import {
   getInventorySync,
   getInventoryHosts,
   define,
+  context,
 } from "./packages/core/src/index.ts";
-import { context, run } from "./packages/core/src/run.ts";
+import { run } from "./packages/core/src/run.ts";
 
 const inventory = getInventorySync(
   path.join(import.meta.dirname, "inventory.yml"),

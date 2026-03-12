@@ -1,97 +1,11 @@
-import { AsyncLocalStorage } from "node:async_hooks";
-import { writeFileSync, rmSync, mkdtempSync } from "node:fs";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
 import {
   type Options,
   type TaskOptions,
   type Host,
   type HostResult,
-  type TaskPayload,
 } from "./types.ts";
-import { LocalBackend } from "./backends/local.ts";
-import { consoleCallback } from "./callbacks/console.ts";
-
-interface RunState {
-  host?: Host;
-  path: string[];
-  options: Options;
-}
-
-const DEFAULT_HOST: Host = { name: "localhost", connection: "local" };
-const DEFAULT_CALLBACKS = [consoleCallback];
-
-let globalConfig: Options = {};
-const runContext = new AsyncLocalStorage<RunState>();
-
-export function configure(opts: Options): void {
-  globalConfig = { ...globalConfig, ...opts };
-}
-
-interface ResolvedOptions extends Options {
-  host: Host;
-  backend: Required<Options>["backend"];
-  callbacks: Required<Options>["callbacks"];
-}
-
-export function resolveOptions(perTask?: TaskOptions): ResolvedOptions {
-  const state = runContext.getStore();
-  const ctx = state?.options ?? {};
-
-  const host = state?.host ?? DEFAULT_HOST;
-
-  const backend =
-    perTask?.backend ??
-    ctx.backend ??
-    globalConfig.backend ??
-    new LocalBackend();
-  const callbacks =
-    perTask?.callbacks ??
-    ctx.callbacks ??
-    globalConfig.callbacks ??
-    DEFAULT_CALLBACKS;
-
-  return {
-    ...globalConfig,
-    ...ctx,
-    ...perTask,
-    host,
-    backend,
-    callbacks,
-  };
-}
-
-export const context = {
-  get host(): Host {
-    return runContext.getStore()?.host ?? DEFAULT_HOST;
-  },
-  get path(): string[] {
-    return runContext.getStore()?.path ?? [];
-  },
-  log(message: string): void {
-    const opts = resolveOptions();
-    for (const cb of opts.callbacks) cb.onMessage?.(opts.host.name, message, context.path);
-  },
-};
-
-function resolveHost(host: Host): {
-  inventory: string;
-  tmpDir?: string;
-} {
-  if (!host.vars || Object.keys(host.vars).length === 0) {
-    return { inventory: host.name + "," };
-  }
-
-  const inventoryData = {
-    all: { hosts: { [host.name]: host.vars } },
-  };
-
-  const dir = mkdtempSync(join(tmpdir(), "nonesible-"));
-  const path = join(dir, "inventory.json");
-  writeFileSync(path, JSON.stringify(inventoryData));
-
-  return { inventory: path, tmpDir: dir };
-}
+import { dispatchTask } from "./backend-context.ts";
+import { _context } from "./context.ts";
 
 export async function executeTask(
   module: string,
@@ -99,23 +13,19 @@ export async function executeTask(
   perTask?: TaskOptions,
   taskName?: string,
 ): Promise<HostResult<Record<string, unknown>>> {
-  const opts = resolveOptions(perTask);
+  const opts = _context.resolveOptions(perTask);
 
   const hostName = opts.host.name;
-  const contextPath = context.path;
+  const contextPath = _context.path;
   const taskPath = taskName ? [...contextPath, taskName] : contextPath;
 
   for (const cb of opts.callbacks)
     cb.onTaskStart?.(hostName, module, args, taskPath);
 
-  const hostInfo = resolveHost(opts.host);
-
-  const payload: TaskPayload = {
+  const payload = {
     module,
     args,
-    hosts: "all",
-    inventory: hostInfo.inventory,
-    connection: opts.host.connection,
+    host: opts.host,
     become: opts.become,
     check: opts.check,
     diff: opts.diff,
@@ -125,7 +35,7 @@ export async function executeTask(
 
   let hostResult: HostResult<Record<string, unknown>>;
   try {
-    const backendResult = await opts.backend.execute(payload);
+    const backendResult = await dispatchTask(_context.backend, payload);
     hostResult = backendResult[hostName];
     if (!hostResult) {
       const firstKey = Object.keys(backendResult)[0];
@@ -137,10 +47,6 @@ export async function executeTask(
     for (const cb of opts.callbacks)
       cb.onTaskError?.(hostName, module, error as Error, taskPath);
     throw error;
-  } finally {
-    if (hostInfo.tmpDir) {
-      rmSync(hostInfo.tmpDir, { recursive: true, force: true });
-    }
   }
 
   for (const cb of opts.callbacks)
@@ -217,7 +123,6 @@ export const run: RunFn & {
   return _run(undefined, opts, fn);
 } as typeof run;
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AsyncFn = (...args: any[]) => Promise<any>;
 
 type WrapFn = {
@@ -264,20 +169,10 @@ function resolveDefineArgs(args: unknown[]): { opts: Options; fn: AsyncFn } {
 }
 
 async function _run<T>(
-  h: Host | undefined,
-  opts: Options,
+  host: Host | undefined,
+  options: Options,
   fn: () => Promise<T>,
   name?: string,
 ): Promise<T> {
-  const parentState = runContext.getStore();
-  const parentOpts = parentState?.options ?? {};
-  const parentPath = parentState?.path ?? [];
-
-  const state: RunState = {
-    host: h ?? parentState?.host,
-    path: name ? [...parentPath, name] : parentPath,
-    options: { ...parentOpts, ...opts },
-  };
-
-  return runContext.run(state, () => fn());
+  return _context.run({ host, path: name ? [name] : [], options }, fn);
 }
