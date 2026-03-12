@@ -10,6 +10,7 @@ export interface Options {
   backend?: ExecutionBackend;
   callbacks?: Callback[];
   ignoreErrors?: boolean;
+  connection?: string;
   become?: boolean;
   check?: boolean;
   diff?: boolean;
@@ -33,6 +34,7 @@ export interface TaskPayload {
   args: Record<string, unknown>;
   hosts: string;
   inventory?: string;
+  connection?: string;
   become?: boolean;
   check?: boolean;
   diff?: boolean;

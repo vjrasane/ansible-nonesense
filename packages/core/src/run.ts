@@ -15,23 +15,40 @@ const DEFAULTS: Required<Pick<Options, "hosts" | "callbacks">> & Options = {
 };
 
 let globalConfig: Options = {};
-const playContext = new AsyncLocalStorage<Options>();
+const runContext = new AsyncLocalStorage<Options>();
 
 export function configure(opts: Options): void {
   globalConfig = { ...globalConfig, ...opts };
 }
 
-export function resolveOptions(
-  perTask?: Options,
-): Options & { hosts: string; callbacks: Callback[]; backend: ExecutionBackend; inventory?: string } {
-  const ctx = playContext.getStore() ?? {};
+export function resolveOptions(perTask?: Options): Options & {
+  hosts: string;
+  callbacks: Callback[];
+  backend: ExecutionBackend;
+  inventory?: string;
+} {
+  const ctx = runContext.getStore() ?? {};
 
   const backend =
-    perTask?.backend ?? ctx.backend ?? globalConfig.backend ?? DEFAULTS.backend ?? new LocalBackend();
+    perTask?.backend ??
+    ctx.backend ??
+    globalConfig.backend ??
+    DEFAULTS.backend ??
+    new LocalBackend();
   const callbacks =
-    perTask?.callbacks ?? ctx.callbacks ?? globalConfig.callbacks ?? DEFAULTS.callbacks;
+    perTask?.callbacks ??
+    ctx.callbacks ??
+    globalConfig.callbacks ??
+    DEFAULTS.callbacks;
 
-  return { ...DEFAULTS, ...globalConfig, ...ctx, ...perTask, backend, callbacks };
+  return {
+    ...DEFAULTS,
+    ...globalConfig,
+    ...ctx,
+    ...perTask,
+    backend,
+    callbacks,
+  };
 }
 
 export async function executeTask(
@@ -48,6 +65,7 @@ export async function executeTask(
     args,
     hosts: opts.hosts,
     inventory: opts.inventory,
+    connection: opts.connection,
     become: opts.become,
     check: opts.check,
     diff: opts.diff,
@@ -78,7 +96,25 @@ export async function executeTask(
 
 export const task = executeTask;
 
-export async function play<T>(opts: Options, fn: () => Promise<T>): Promise<T> {
-  const parent = playContext.getStore() ?? {};
-  return playContext.run({ ...parent, ...opts }, fn);
+export async function run<T>(opts: Options, fn: () => Promise<T>): Promise<T> {
+  const parent = runContext.getStore() ?? {};
+  return runContext.run({ ...parent, ...opts }, fn);
 }
+
+interface Compose {
+  <TReturn>(fn: () => Promise<TReturn>): (opts?: Options) => Promise<TReturn>;
+  <TReturn, TInput>(
+    fn: (input: TInput) => Promise<TReturn>,
+  ): (input: TInput, opts?: Options) => Promise<TReturn>;
+}
+
+export const compose: Compose = (fn: Function) => {
+  return function (...args: any[]) {
+    if (fn.length === 0) {
+      const [opts] = args;
+      return run(opts ?? {}, fn as any);
+    }
+    const [input, opts] = args;
+    return run(opts ?? {}, () => (fn as any)(input));
+  };
+};

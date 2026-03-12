@@ -8,7 +8,7 @@ import {
   stat,
 } from "../../../generated/builtin/index.ts";
 import { DryRunBackend } from "./backends/dryrun.ts";
-import { play, configure } from "./run.ts";
+import { run, configure } from "./run.ts";
 
 describe("module", () => {
   let backend: DryRunBackend;
@@ -18,7 +18,7 @@ describe("module", () => {
   });
 
   describe("standalone execution", () => {
-    it("works without play() using per-task options", async () => {
+    it("works without run() using per-task options", async () => {
       const backend = new DryRunBackend([
         { localhost: { changed: true, failed: false, dest: "/tmp/foo" } },
       ]);
@@ -50,9 +50,9 @@ describe("module", () => {
     });
   });
 
-  describe("play() context", () => {
+  describe("run() context", () => {
     it("sets shared options for all tasks", async () => {
-      await play(
+      await run(
         {
           hosts: "webservers",
           inventory: "hosts.yml",
@@ -71,8 +71,8 @@ describe("module", () => {
       }
     });
 
-    it("per-task options override play() context", async () => {
-      await play(
+    it("per-task options override run() context", async () => {
+      await run(
         {
           hosts: "webservers",
           inventory: "hosts.yml",
@@ -86,8 +86,8 @@ describe("module", () => {
       expect(backend.executed[0].become).toBe(true);
     });
 
-    it("per-task hosts override play() hosts", async () => {
-      await play({ hosts: "webservers", inventory: "hosts.yml" }, async () => {
+    it("per-task hosts override run() hosts", async () => {
+      await run({ hosts: "webservers", inventory: "hosts.yml" }, async () => {
         await copy({ dest: "/tmp/foo" }, { hosts: "dbservers" });
       });
 
@@ -102,7 +102,7 @@ describe("module", () => {
         { localhost: { changed: false, failed: false } },
       ]);
 
-      await play(
+      await run(
         { hosts: "all", inventory: "hosts.yml", backend },
         async () => {
           const result = await copy({ dest: "/tmp/foo", content: "new" });
@@ -121,7 +121,7 @@ describe("module", () => {
         { localhost: { changed: false, failed: false } },
       ]);
 
-      await play(
+      await run(
         { hosts: "all", inventory: "hosts.yml", backend },
         async () => {
           const result = await copy({ dest: "/tmp/foo", content: "same" });
@@ -137,7 +137,7 @@ describe("module", () => {
     it("loops in pure typescript", async () => {
       const backend = new DryRunBackend();
 
-      await play(
+      await run(
         { hosts: "all", inventory: "hosts.yml", backend, callbacks: [] },
         async () => {
           for (const pkg of ["nginx", "curl", "git"]) {
@@ -162,7 +162,7 @@ describe("module", () => {
         { localhost: { changed: true, failed: false } },
       ]);
 
-      await play(
+      await run(
         { hosts: "all", inventory: "hosts.yml", backend },
         async () => {
           const check = await stat({ path: "/etc/app.conf" });
@@ -177,7 +177,7 @@ describe("module", () => {
     });
 
     it("multiple modules in sequence", async () => {
-      await play(
+      await run(
         {
           hosts: "webservers",
           inventory: "hosts.yml",

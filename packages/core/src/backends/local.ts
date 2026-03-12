@@ -66,8 +66,6 @@ export class LocalBackend implements ExecutionBackend {
       task.hosts,
       "-m",
       task.module,
-      "--connection",
-      "local",
     ];
 
     if (Object.keys(task.args).length > 0) {
@@ -75,6 +73,7 @@ export class LocalBackend implements ExecutionBackend {
     }
 
     if (task.inventory) args.push("-i", task.inventory);
+    if (task.connection) args.push("--connection", task.connection);
     if (task.become) args.push("--become");
     if (task.check) args.push("--check");
     if (task.diff) args.push("--diff");
