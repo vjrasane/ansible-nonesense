@@ -4,7 +4,7 @@ import { debug, copy, stat } from "../../../generated/builtin/index.ts";
 
 describe("LocalBackend integration", { timeout: 30_000 }, () => {
   const backend = new LocalBackend();
-  const opts = { backend, callbacks: [] };
+  const opts = { backend, callbacks: [], connection: "local" };
 
   it("runs debug module", async () => {
     const result = await debug({ msg: "hello from nonesible" }, opts);

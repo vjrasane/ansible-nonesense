@@ -47,11 +47,44 @@ async function checkAnsible(path: string): Promise<void> {
   }
 }
 
+class Semaphore {
+  private _queue: (() => void)[] = [];
+  private _active = 0;
+
+  constructor(private _limit: number) {}
+
+  async acquire(): Promise<void> {
+    if (this._active < this._limit) {
+      this._active++;
+      return;
+    }
+    return new Promise<void>((resolve) => {
+      this._queue.push(() => {
+        this._active++;
+        resolve();
+      });
+    });
+  }
+
+  release(): void {
+    this._active--;
+    this._queue.shift()?.();
+  }
+}
+
+export interface LocalBackendOptions {
+  ansible?: string;
+  concurrency?: number;
+}
+
 export class LocalBackend implements ExecutionBackend {
   private _checked: Promise<void> | undefined;
+  private _ansible: string;
+  private _semaphore: Semaphore;
 
-  constructor(private _ansible = "ansible") {
-    this._ansible = _ansible;
+  constructor(opts: LocalBackendOptions = {}) {
+    this._ansible = opts.ansible ?? "ansible";
+    this._semaphore = new Semaphore(opts.concurrency ?? 10);
   }
 
   async execute(
@@ -61,7 +94,18 @@ export class LocalBackend implements ExecutionBackend {
       this._checked = checkAnsible(this._ansible);
     }
     await this._checked;
+    await this._semaphore.acquire();
 
+    try {
+      return await this._run(task);
+    } finally {
+      this._semaphore.release();
+    }
+  }
+
+  private async _run(
+    task: TaskPayload,
+  ): Promise<BackendResult<Record<string, unknown>>> {
     const args = [
       task.hosts,
       "-m",
