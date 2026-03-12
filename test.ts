@@ -25,7 +25,8 @@ const main = async () => {
       h.run(
         define`Running on ${h.name}`(async () => {
           await play("Hello " + h.name);
-          await debug`Send message`({ msg: "Hell again!" });
+          const msg = await debug`Send message`({ msg: "Hell again!" });
+          context.log(`Got message: ${msg}`);
         }),
       ),
     ),

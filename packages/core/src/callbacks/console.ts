@@ -29,4 +29,9 @@ export const consoleCallback: Callback = {
   onTaskError(host, module, error, path) {
     console.log(`${dim(`[${host}]`)} ${label(module, path)} ${red(`ERROR: ${error.message}`)}`);
   },
+
+  onMessage(host, message, path) {
+    const prefix = path.length > 0 ? `${path.join(" > ")} ` : "";
+    console.log(`${dim(`[${host}]`)} ${prefix}${message}`);
+  },
 };

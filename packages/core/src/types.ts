@@ -2,6 +2,7 @@ export interface Callback {
   onTaskStart?(host: string, module: string, args: Record<string, unknown>, path: string[]): void;
   onTaskComplete?(host: string, module: string, result: HostResult<Record<string, unknown>>, path: string[]): void;
   onTaskError?(host: string, module: string, error: Error, path: string[]): void;
+  onMessage?(host: string, message: string, path: string[]): void;
 }
 
 export interface Host {

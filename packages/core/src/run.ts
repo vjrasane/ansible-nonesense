@@ -68,6 +68,10 @@ export const context = {
   get path(): string[] {
     return runContext.getStore()?.path ?? [];
   },
+  log(message: string): void {
+    const opts = resolveOptions();
+    for (const cb of opts.callbacks) cb.onMessage?.(opts.host.name, message, context.path);
+  },
 };
 
 function resolveHost(host: Host): {

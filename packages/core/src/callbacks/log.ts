@@ -10,4 +10,7 @@ export const logCallback: Callback = {
   onTaskError(host, module, error, path) {
     console.log(JSON.stringify({ event: "task_error", host, module, path, error: error.message, timestamp: new Date().toISOString() }));
   },
+  onMessage(host, message, path) {
+    console.log(JSON.stringify({ event: "message", host, path, message, timestamp: new Date().toISOString() }));
+  },
 };
