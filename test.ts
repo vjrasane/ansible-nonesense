@@ -24,9 +24,10 @@ const main = async () => {
     hosts.map((h) =>
       h.run(
         define`Running on ${h.name}`(async () => {
-          await play("Hello " + h.name);
-          const msg = await debug`Send message`({ msg: "Hell again!" });
+          const msg = await play("Hello " + h.name);
           context.log(`Got message: ${msg}`);
+          await debug`Send message`({ msg: "Hello again!" });
+          context.log(`Finished running on ${h.name}`);
         }),
       ),
     ),
