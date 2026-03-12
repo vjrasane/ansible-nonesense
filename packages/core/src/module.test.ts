@@ -8,7 +8,7 @@ import {
   stat,
 } from "../../../generated/builtin/index.ts";
 import { DryRunBackend } from "./backends/dryrun.ts";
-import { run, configure } from "./run.ts";
+import { run, configure, compose } from "./run.ts";
 
 describe("module", () => {
   let backend: DryRunBackend;
@@ -18,34 +18,22 @@ describe("module", () => {
   });
 
   describe("standalone execution", () => {
-    it("works without run() using per-task options", async () => {
+    it("works without run() using global config", async () => {
       const backend = new DryRunBackend([
         { localhost: { changed: true, failed: false, dest: "/tmp/foo" } },
       ]);
+      configure({ callbacks: [], backend });
 
-      const result = await copy(
-        { dest: "/tmp/foo", src: "./foo" },
-        { backend, callbacks: [] },
-      );
+      const result = await copy({ dest: "/tmp/foo", src: "./foo" });
       expect(result.localhost.changed).toBe(true);
       expect(result.localhost.dest).toBe("/tmp/foo");
       expect(backend.executed[0].module).toBe("ansible.builtin.copy");
       expect(backend.executed[0].hosts).toBe("localhost");
-      expect(backend.executed[0].inventory).toBeUndefined();
     });
 
-    it("per-task options override defaults", async () => {
-      await debug(
-        { msg: "hello" },
-        {
-          hosts: "webservers",
-          inventory: "prod.yml",
-          become: true,
-        },
-      );
+    it("per-task options override non-host defaults", async () => {
+      await debug({ msg: "hello" }, { become: true });
 
-      expect(backend.executed[0].hosts).toBe("webservers");
-      expect(backend.executed[0].inventory).toBe("prod.yml");
       expect(backend.executed[0].become).toBe(true);
     });
   });
@@ -53,11 +41,7 @@ describe("module", () => {
   describe("run() context", () => {
     it("sets shared options for all tasks", async () => {
       await run(
-        {
-          hosts: "webservers",
-          inventory: "hosts.yml",
-          become: true,
-        },
+        { hosts: "webservers", inventory: "hosts.yml", become: true },
         async () => {
           await debug({ msg: "hello" });
           await copy({ dest: "/tmp/foo" });
@@ -73,11 +57,7 @@ describe("module", () => {
 
     it("per-task options override run() context", async () => {
       await run(
-        {
-          hosts: "webservers",
-          inventory: "hosts.yml",
-          become: false,
-        },
+        { hosts: "webservers", inventory: "hosts.yml", become: false },
         async () => {
           await copy({ dest: "/tmp/foo" }, { become: true });
         },
@@ -86,12 +66,155 @@ describe("module", () => {
       expect(backend.executed[0].become).toBe(true);
     });
 
-    it("per-task hosts override run() hosts", async () => {
+    it("nested run() overrides parent hosts", async () => {
       await run({ hosts: "webservers", inventory: "hosts.yml" }, async () => {
-        await copy({ dest: "/tmp/foo" }, { hosts: "dbservers" });
+        await run({ hosts: "dbservers" }, async () => {
+          await copy({ dest: "/tmp/foo" });
+        });
       });
 
       expect(backend.executed[0].hosts).toBe("dbservers");
+    });
+
+    it("returns host map in result", async () => {
+      const backend = new DryRunBackend([
+        {
+          web01: { changed: false, failed: true },
+          web02: { changed: false, failed: false },
+        },
+      ]);
+
+      const { hosts } = await run(
+        {
+          hosts: [{ name: "web01" }, { name: "web02" }],
+          backend,
+          callbacks: [],
+        },
+        async (ctx) => {
+          ctx.excludeFailed(await copy({ dest: "/tmp/foo" }, { continueOnError: true }));
+        },
+      );
+
+      expect(hosts.web01.failed).toBe(true);
+      expect(hosts.web02.failed).toBe(false);
+    });
+  });
+
+  describe("excludeFaileding", () => {
+    it("excludeFaileded hosts are excluded from subsequent tasks", async () => {
+      const backend = new DryRunBackend([
+        {
+          web01: { changed: false, failed: true },
+          web02: { changed: false, failed: false },
+        },
+        {
+          web02: { changed: true, failed: false },
+        },
+      ]);
+
+      await run(
+        {
+          hosts: [{ name: "web01" }, { name: "web02" }],
+          backend,
+          callbacks: [],
+        },
+        async (ctx) => {
+          ctx.excludeFailed(
+            await copy({ dest: "/tmp/foo" }, { continueOnError: true }),
+          );
+          await copy({ dest: "/tmp/bar" });
+        },
+      );
+
+      expect(backend.executed).toHaveLength(2);
+      expect(backend.executed[1].inventory).toBe("web02,");
+    });
+
+    it("excludeFailed is inherited by nested run()", async () => {
+      const backend = new DryRunBackend([
+        {
+          web01: { changed: false, failed: true },
+          web02: { changed: false, failed: false },
+        },
+        {
+          web02: { changed: false, failed: false },
+        },
+      ]);
+
+      await run(
+        {
+          hosts: [{ name: "web01" }, { name: "web02" }],
+          backend,
+          callbacks: [],
+        },
+        async (ctx) => {
+          ctx.excludeFailed(
+            await copy({ dest: "/tmp/foo" }, { continueOnError: true }),
+          );
+          await run({}, async () => {
+            await debug({ msg: "only web02" });
+          });
+        },
+      );
+
+      expect(backend.executed).toHaveLength(2);
+      expect(backend.executed[1].inventory).toBe("web02,");
+    });
+
+    it("returns empty result when all hosts are excludeFaileded", async () => {
+      const backend = new DryRunBackend([
+        {
+          web01: { changed: false, failed: true },
+        },
+      ]);
+
+      await run(
+        {
+          hosts: [{ name: "web01" }],
+          backend,
+          callbacks: [],
+        },
+        async (ctx) => {
+          ctx.excludeFailed(
+            await copy({ dest: "/tmp/foo" }, { continueOnError: true }),
+          );
+          const second = await copy({ dest: "/tmp/bar" });
+          expect(second).toEqual({});
+        },
+      );
+
+      expect(backend.executed).toHaveLength(1);
+    });
+
+    it("composed function propagates excludeFaileds via run result", async () => {
+      const backend = new DryRunBackend([
+        {
+          web01: { changed: false, failed: true },
+          web02: { changed: false, failed: false },
+        },
+        {
+          web02: { changed: true, failed: false },
+        },
+      ]);
+
+      const installNginx = compose(async (ctx) => {
+        ctx.excludeFailed(await copy({ dest: "/tmp/foo" }, { continueOnError: true }));
+      });
+
+      await run(
+        {
+          hosts: [{ name: "web01" }, { name: "web02" }],
+          backend,
+          callbacks: [],
+        },
+        async (ctx) => {
+          ctx.excludeFailed((await installNginx()).hosts);
+          await copy({ dest: "/tmp/bar" });
+        },
+      );
+
+      expect(backend.executed).toHaveLength(2);
+      expect(backend.executed[1].inventory).toBe("web02,");
     });
   });
 
@@ -178,11 +301,7 @@ describe("module", () => {
 
     it("multiple modules in sequence", async () => {
       await run(
-        {
-          hosts: "webservers",
-          inventory: "hosts.yml",
-          become: true,
-        },
+        { hosts: "webservers", inventory: "hosts.yml", become: true },
         async () => {
           await file({ path: "/opt/app", state: "directory", owner: "deploy" });
           await copy({ dest: "/opt/app/config.yml", content: "port: 8080" });
@@ -203,8 +322,9 @@ describe("module", () => {
           web02: { changed: false, failed: false, dest: "/tmp/foo" },
         },
       ]);
+      configure({ callbacks: [], backend });
 
-      const result = await copy({ dest: "/tmp/foo" }, { backend });
+      const result = await copy({ dest: "/tmp/foo" });
       expect(result.web01.changed).toBe(true);
       expect(result.web02.changed).toBe(false);
       expect(Object.keys(result)).toEqual(["web01", "web02"]);

@@ -4,18 +4,35 @@ export interface Callback {
   onTaskError?(module: string, error: Error): void;
 }
 
+export interface Host {
+  readonly name: string;
+  readonly vars?: Readonly<Record<string, unknown>>;
+}
+
 export interface Options {
-  hosts?: string;
+  hosts?: string | Host[];
   inventory?: string;
   backend?: ExecutionBackend;
   callbacks?: Callback[];
-  ignoreErrors?: boolean;
+  continueOnError?: boolean;
   connection?: string;
   become?: boolean;
   check?: boolean;
   diff?: boolean;
   extraVars?: Record<string, unknown>;
   verbosity?: 0 | 1 | 2 | 3 | 4;
+}
+
+export type TaskOptions = Omit<Options, "hosts" | "inventory">;
+
+export interface RunContext {
+  excludeFailed<T extends Record<string, { failed: boolean }>>(result: T): T;
+  getHosts(): Host[];
+}
+
+export interface RunResult<T> {
+  value: T;
+  hosts: Record<string, { failed: boolean }>;
 }
 
 export type HostResult<T> = T & {
