@@ -111,21 +111,18 @@ export class LocalBackend extends Backend {
   private async _run(
     task: TaskPayload,
   ): Promise<BackendResult<Record<string, unknown>>> {
-    const { inventory, tmpDir } = resolveHost(task.host);
+    const host = task.host;
+    const { inventory, tmpDir } = resolveInventory(host);
 
     try {
-      const args = [
-        "all",
-        "-m",
-        task.module,
-      ];
+      const args = ["all", "-m", task.module];
 
       if (Object.keys(task.args).length > 0) {
         args.push("-a", JSON.stringify(task.args));
       }
 
       args.push("-i", inventory);
-      if (task.host.connection) args.push("--connection", task.host.connection);
+      if (host.connection) args.push("--connection", host.connection);
       if (task.become) args.push("--become");
       if (task.check) args.push("--check");
       if (task.diff) args.push("--diff");
@@ -169,7 +166,7 @@ export class LocalBackend extends Backend {
   }
 }
 
-function resolveHost(host: Host): { inventory: string; tmpDir?: string } {
+function resolveInventory(host: Host): { inventory: string; tmpDir?: string } {
   if (!host.vars || Object.keys(host.vars).length === 0) {
     return { inventory: host.name + "," };
   }
@@ -185,7 +182,9 @@ function resolveHost(host: Host): { inventory: string; tmpDir?: string } {
   return { inventory: path, tmpDir: dir };
 }
 
-function parseJsonOutput(stdout: string): BackendResult<Record<string, unknown>> {
+function parseJsonOutput(
+  stdout: string,
+): BackendResult<Record<string, unknown>> {
   const output: AnsibleJsonOutput = JSON.parse(stdout);
 
   const hostsData = output.plays?.[0]?.tasks?.[0]?.hosts ?? {};
