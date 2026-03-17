@@ -1,11 +1,20 @@
 {
-  "name": "@sensible/core",
   "private": true,
   "type": "module",
+  "workspaces": [
+    "packages/core",
+    "packages/community"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces",
+    "test": "vitest run"
+  },
   "devDependencies": {
     "tsx": "^4.21.0",
     "typescript": "^5.8.0",
     "vitest": "^3.0.0",
     "@types/node": "^22.0.0"
-  }
+  },
+  "name": "",
+  "version": ""
 }

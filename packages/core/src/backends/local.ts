@@ -3,8 +3,8 @@ import { promisify } from "node:util";
 import { writeFileSync, rmSync, mkdtempSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import type { Host, TaskPayload, BackendResult } from "../types.ts";
-import { Backend } from "../backend-context.ts";
+import type { Host, TaskPayload, BackendResult } from "../types.js";
+import { Backend } from "../backend-context.js";
 
 const exec = promisify(execFile);
 

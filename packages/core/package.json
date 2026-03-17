@@ -1,0 +1,35 @@
+{
+  "name": "@sensible-ts/core",
+  "version": "0.1.1",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "default": "./dist/src/index.js"
+    },
+    "./builtins": {
+      "types": "./dist/builtins/index.d.ts",
+      "default": "./dist/builtins/index.js"
+    },
+    "./builtins/*": {
+      "types": "./dist/builtins/*.d.ts",
+      "default": "./dist/builtins/*.js"
+    }
+  },
+  "bin": {
+    "codegen": "./dist/src/codegen.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "vitest run"
+  },
+  "peerDependencies": {
+    "@types/node": ">=20"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.15"
+  }
+}

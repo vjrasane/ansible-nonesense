@@ -1,8 +1,8 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import { ExecutionBackend, Host, Options, TaskOptions } from "./types.ts";
-import { LocalBackend } from "./backends/local.ts";
-import { consoleCallback } from "./callbacks/console.ts";
-import { backendContext } from "./backend-context.ts";
+import { ExecutionBackend, Host, Options, TaskOptions } from "./types.js";
+import { LocalBackend } from "./backends/local.js";
+import { consoleCallback } from "./callbacks/console.js";
+import { backendContext } from "./backend-context.js";
 
 interface RunState {
   host?: Host;

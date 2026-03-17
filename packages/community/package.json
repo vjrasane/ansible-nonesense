@@ -1,0 +1,27 @@
+{
+  "name": "@sensible-ts/community",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/modules/index.d.ts",
+      "default": "./dist/modules/index.js"
+    },
+    "./*": {
+      "types": "./dist/modules/*.d.ts",
+      "default": "./dist/modules/*.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json"
+  },
+  "dependencies": {
+    "@sensible-ts/core": "*"
+  },
+  "peerDependencies": {
+    "@types/node": ">=20"
+  }
+}

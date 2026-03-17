@@ -1,5 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import type { ExecutionBackend, TaskPayload, BackendResult } from "./types.ts";
+import type { ExecutionBackend, TaskPayload, BackendResult } from "./types.js";
 
 export const backendContext = new AsyncLocalStorage<ExecutionBackend>();
 

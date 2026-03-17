@@ -1,6 +1,6 @@
 import { execFile, execFileSync } from "node:child_process";
 import { promisify } from "node:util";
-import { host, type RunnableHost } from "./run.ts";
+import { host, type RunnableHost } from "./run.js";
 
 const exec = promisify(execFile);
 

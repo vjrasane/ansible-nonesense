@@ -1,5 +1,5 @@
-import type { TaskPayload, BackendResult } from "../types.ts";
-import { Backend } from "../backend-context.ts";
+import type { TaskPayload, BackendResult } from "../types.js";
+import { Backend } from "../backend-context.js";
 
 const emptyResult: BackendResult<Record<string, unknown>> = {
   localhost: { changed: false, failed: false },

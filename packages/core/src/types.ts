@@ -1,8 +1,20 @@
 export interface Callback {
-  onTaskStart?(host: string, module: string, args: Record<string, unknown>, path: string[]): void;
-  onTaskComplete?(host: string, module: string, result: HostResult<Record<string, unknown>>, path: string[]): void;
-  onTaskError?(host: string, module: string, error: Error, path: string[]): void;
-  onMessage?(host: string, message: string, path: string[]): void;
+  onTaskStart?(args: Record<string, string>, path: string[]): void;
+  onTaskComplete?(
+    result: HostResult<Record<string, unknown>>,
+    args: Record<string, string>,
+    path: string[],
+  ): void;
+  onTaskError?(
+    error: Error,
+    args: Record<string, string>,
+    path: string[],
+  ): void;
+  onMessage?(
+    message: string,
+    args: Record<string, string>,
+    path: string[],
+  ): void;
 }
 
 export interface Host {
@@ -35,9 +47,15 @@ export interface ExecutionBackend {
   execute<T>(fn: () => Promise<T>): Promise<T>;
 }
 
-export interface TaskPayload {
+export interface TaskPayload<TArgs = Record<string, unknown>> {
+  args: TArgs;
+  host: Host;
+}
+
+export interface ModulePayload<
+  TArgs = Record<string, unknown>,
+> extends TaskPayload<TArgs> {
   module: string;
-  args: Record<string, unknown>;
   host: Host;
   become?: boolean;
   check?: boolean;

@@ -1,4 +1,4 @@
-import type { Callback, HostResult } from "../types.ts";
+import type { Callback, HostResult } from "../types.js";
 
 export const logCallback: Callback = {
   onTaskStart(host, module, args, path) {

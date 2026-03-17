@@ -1,0 +1,42 @@
+// Auto-generated from: community.general.gitlab_label
+// DO NOT EDIT — regenerate with codegen
+
+import { defineModule } from "@sensible-ts/core";
+
+export interface GitlabLabelArgs {
+  /** GitLab CI job token for logging in. */
+  api_job_token?: string;
+  /** GitLab OAuth token for logging in. */
+  api_oauth_token?: string;
+  /** The password to use for authentication against the API. */
+  api_password?: string;
+  /** GitLab access token with API permissions. */
+  api_token?: string;
+  /** The resolvable endpoint for the API. */
+  api_url?: string;
+  /** The username to use for authentication against the API. */
+  api_username?: string;
+  /** The CA certificates bundle to use to verify GitLab server certificate. */
+  ca_path?: string;
+  /** The path of the group. Either this or O(project) is required. */
+  group?: string;
+  /** A list of dictionaries that represents gitlab project's or group's labels. */
+  labels?: Record<string, unknown> | Record<string, unknown>[];
+  /** The path and name of the project. Either this or O(group) is required. */
+  project?: string;
+  /** When set to V(true), delete all labels which are not mentioned in the task. */
+  purge?: boolean;
+  /** Create or delete project or group label. */
+  state?: "present" | "absent";
+  /** Whether or not to validate SSL certs when supplying a HTTPS endpoint. */
+  validate_certs?: boolean;
+}
+
+export interface GitlabLabelReturn {
+  /** Four lists of the labels which were added, updated, removed or exist. */
+  labels?: Record<string, unknown>;
+  /** API object. */
+  labels_obj?: Record<string, unknown>;
+}
+
+export const gitlab_label = defineModule<GitlabLabelArgs, GitlabLabelReturn>("community.general.gitlab_label");

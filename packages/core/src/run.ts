@@ -3,28 +3,31 @@ import {
   type TaskOptions,
   type Host,
   type HostResult,
-} from "./types.ts";
-import { dispatchTask } from "./backend-context.ts";
-import { _context } from "./context.ts";
+  TaskPayload,
+  ModulePayload,
+} from "./types.js";
+import { dispatchTask } from "./backend-context.js";
+import { _context } from "./context.js";
 
-export async function executeTask(
-  module: string,
-  args: Record<string, unknown>,
-  perTask?: TaskOptions,
+export async function executeTaskFn<TArgs, TReturn>(
+  taskFn: (args: TArgs, opts?: TaskOptions) => Promise<HostResult<TReturn>>,
+  taskArgs: TArgs,
+  taskOpts?: TaskOptions,
   taskName?: string,
-): Promise<HostResult<Record<string, unknown>>> {
-  const opts = _context.resolveOptions(perTask);
+): Promise<HostResult<TReturn>> {
+  const opts = _context.resolveOptions(taskOpts);
 
   const hostName = opts.host.name;
   const contextPath = _context.path;
   const taskPath = taskName ? [...contextPath, taskName] : contextPath;
 
-  for (const cb of opts.callbacks)
-    cb.onTaskStart?.(hostName, module, args, taskPath);
+  const callbackArgs = {
+    host: hostName,
+  };
+
+  for (const cb of opts.callbacks) cb.onTaskStart?.(callbackArgs, taskPath);
 
   const payload = {
-    module,
-    args,
     host: opts.host,
     become: opts.become,
     check: opts.check,
@@ -33,30 +36,47 @@ export async function executeTask(
     verbosity: opts.verbosity,
   };
 
-  let hostResult: HostResult<Record<string, unknown>>;
+  let hostResult: HostResult<TReturn>;
   try {
+    hostResult = await taskFn(taskArgs, payload);
+  } catch (error) {
+    for (const cb of opts.callbacks)
+      cb.onTaskError?.(error as Error, callbackArgs, taskPath);
+    throw error;
+  }
+
+  for (const cb of opts.callbacks)
+    cb.onTaskComplete?.(hostResult, callbackArgs, taskPath);
+
+  if (!opts.continueOnError && hostResult.failed) {
+    throw new Error(`Task ${taskName} failed on: ${hostName}`);
+  }
+
+  return hostResult;
+}
+
+export async function executeTask(
+  moduleName: string,
+  taskArgs: Record<string, unknown>,
+  taskOpts?: TaskOptions,
+  taskName?: string,
+): Promise<HostResult<Record<string, unknown>>> {
+  const taskFn = async (taskPayload: TaskPayload, taskOpts?: TaskOptions) => {
+    const modulePayload = {
+      ...taskPayload,
+      module: moduleName,
+    };
     const backendResult = await dispatchTask(_context.backend, payload);
-    hostResult = backendResult[hostName];
+    let hostResult = backendResult[payload.host.name];
     if (!hostResult) {
       const firstKey = Object.keys(backendResult)[0];
       hostResult = firstKey
         ? backendResult[firstKey]
         : { changed: false, failed: true };
     }
-  } catch (error) {
-    for (const cb of opts.callbacks)
-      cb.onTaskError?.(hostName, module, error as Error, taskPath);
-    throw error;
-  }
-
-  for (const cb of opts.callbacks)
-    cb.onTaskComplete?.(hostName, module, hostResult, taskPath);
-
-  if (!opts.continueOnError && hostResult.failed) {
-    throw new Error(`Task ${module} failed on: ${hostName}`);
-  }
-
-  return hostResult;
+    return hostResult;
+  };
+  return executeTaskFn(taskFn, taskArgs, taskOpts, taskName ?? moduleName);
 }
 
 export const task = executeTask;

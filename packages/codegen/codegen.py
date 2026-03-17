@@ -55,11 +55,11 @@ def to_pascal(name: str) -> str:
 
 
 def namespace_to_dir(namespace: str) -> Path:
-    """ansible.builtin -> generated/builtin, community.general -> generated/community-general"""
+    """ansible.builtin -> packages/core/modules, community.* -> packages/community/modules"""
     parts = namespace.split(".")
     if parts[0] == "ansible":
-        return GENERATED_DIR / parts[1]
-    return GENERATED_DIR / "-".join(parts)
+        return REPO_ROOT / "packages" / "core" / "builtins"
+    return REPO_ROOT / "packages" / "community" / "modules"
 
 
 def generate_interface(name: str, options: dict) -> str:
@@ -97,7 +97,7 @@ def generate_module(fqcn: str, doc_data: dict) -> str:
     return f'''// Auto-generated from: {fqcn}
 // DO NOT EDIT — regenerate with codegen
 
-import {{ defineModule }} from "../../packages/core/src/index.ts";
+import {{ defineModule }} from "@sensible-ts/core";
 
 {args_interface}
 
