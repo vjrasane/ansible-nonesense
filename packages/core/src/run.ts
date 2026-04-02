@@ -40,8 +40,8 @@ export async function executeTaskFn<TArgs, TReturn>(
   try {
     hostResult = await taskFn(taskArgs, payload);
   } catch (error) {
-    for (const cb of opts.callbacks)
-      cb.onTaskError?.(error as Error, callbackArgs, taskPath);
+    // for (const cb of opts.callbacks)
+    cb.onTaskError?.(error as Error, callbackArgs, taskPath);
     throw error;
   }
 
