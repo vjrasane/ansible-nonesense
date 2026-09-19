@@ -1,4 +1,5 @@
 import { LocalConnection } from "./connection.ts";
+import { currentContext } from "./context.ts";
 import { Host } from "./host.ts";
 const ANSIBLE_VERSION = "2.17.x"; // the generated version const
 
@@ -46,10 +47,6 @@ class ModuleError extends Error {
   }
 }
 
-const currentHost = () => {
-  return new Host("localhost", new LocalConnection());
-};
-
 interface ModuleMeta {
   actionPlugin: boolean;
   powershell: boolean;
@@ -57,10 +54,12 @@ interface ModuleMeta {
   checkMode: "full" | "partial" | "none" | "N/A";
 }
 
-interface ModuleExecOpts {
+export interface ModuleExecOpts {
   check?: boolean;
   diff?: boolean;
   noLog?: boolean;
+  become?: boolean;
+  env?: Record<string, string>;
 }
 
 class Module<TArgs extends Record<string, any>, TReturn> {
@@ -75,21 +74,22 @@ class Module<TArgs extends Record<string, any>, TReturn> {
   async exec(
     name: string | undefined,
     args: TArgs,
-    opts: ModuleExecOpts = {},
+    moduleOpts: ModuleExecOpts = {},
   ): Promise<ModuleResult<TReturn>> {
+    const ctx = currentContext();
+    const mergedOpts = { ...ctx.opts, ...moduleOpts };
+
     if (this.meta.actionPlugin)
       throw new Error(`${this.fqcn} action plugin not implemented`);
     if (this.meta.powershell)
       throw new Error(`${this.fqcn} powershell module not supported`);
 
     if (
-      opts.check &&
+      mergedOpts.check &&
       this.meta.checkMode !== "full" &&
       this.meta.checkMode !== "partial"
     )
       return SKIPPED_RESULT;
-
-    const host = currentHost();
 
     const a: Record<string, unknown> = { ...args };
     if (this.meta.rawParams && "cmd" in a) {
@@ -99,9 +99,9 @@ class Module<TArgs extends Record<string, any>, TReturn> {
     const params = {
       ANSIBLE_MODULE_ARGS: {
         ...a,
-        _ansible_check_mode: opts.check ?? false,
-        _ansible_diff: opts.diff ?? false,
-        _ansible_no_log: opts.noLog ?? false,
+        _ansible_check_mode: mergedOpts.check ?? false,
+        _ansible_diff: mergedOpts.diff ?? false,
+        _ansible_no_log: mergedOpts.noLog ?? false,
         _ansible_verbosity: 0,
         _ansible_module_name: this.fqcn.split(".").at(-1),
         _ansible_version: ANSIBLE_VERSION,
@@ -122,7 +122,7 @@ class Module<TArgs extends Record<string, any>, TReturn> {
       `basic._ANSIBLE_ARGS = base64.b64decode("${paramsBase64}")`,
       `runpy.run_module("${this.moduleFqn}", run_name="__main__", alter_sys=True)`,
     ].join("\n");
-    const raw: RawResult<TReturn> = await host.execPython(wrapper);
+    const raw: RawResult<TReturn> = await ctx.host.execPython(wrapper);
 
     const failed = raw.failed === true;
     const skipped = raw.skipped === true;

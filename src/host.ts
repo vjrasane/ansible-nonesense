@@ -1,4 +1,5 @@
-import { Connection } from "./connection.ts";
+import { Connection, LocalConnection } from "./connection.ts";
+import { withHost } from "./context.ts";
 
 type HostConfig = {
   pythonPath?: string;
@@ -51,7 +52,13 @@ export class Host {
       );
     }
   }
+
+  run<T>(fn: () => Promise<T>): Promise<T> {
+    return withHost(this, fn);
+  }
 }
+
+export const localhost = new Host("localhost", new LocalConnection());
 
 // export async function execModuleOnHost(
 //   host: Host,
