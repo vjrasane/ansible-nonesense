@@ -17,9 +17,21 @@ export interface Callback {
   ): void;
 }
 
+export interface ExecResult {
+  stdout: string;
+  stderr: string;
+  rc: number;
+}
+
+// How to reach a host and run a payload on it. The backend depends only on
+// this; it never knows whether execution is local, over SSH, or otherwise.
+export interface Connection {
+  exec(script: string, opts?: { become?: boolean }): Promise<ExecResult>;
+}
+
 export interface Host {
   readonly name: string;
-  readonly connection?: string;
+  readonly connection: Connection;
   readonly vars?: Readonly<Record<string, unknown>>;
 }
 

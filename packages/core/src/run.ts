@@ -3,8 +3,8 @@ import {
   type TaskOptions,
   type Host,
   type HostResult,
+  type ModulePayload,
   TaskPayload,
-  ModulePayload,
 } from "./types.js";
 import { dispatchTask } from "./backend-context.js";
 import { _context } from "./context.js";
@@ -40,8 +40,8 @@ export async function executeTaskFn<TArgs, TReturn>(
   try {
     hostResult = await taskFn(taskArgs, payload);
   } catch (error) {
-    // for (const cb of opts.callbacks)
-    cb.onTaskError?.(error as Error, callbackArgs, taskPath);
+    for (const cb of opts.callbacks)
+      cb.onTaskError?.(error as Error, callbackArgs, taskPath);
     throw error;
   }
 
@@ -57,17 +57,18 @@ export async function executeTaskFn<TArgs, TReturn>(
 
 export async function executeTask(
   moduleName: string,
-  taskArgs: Record<string, unknown>,
+  taskArgs: TaskPayload,
   taskOpts?: TaskOptions,
   taskName?: string,
 ): Promise<HostResult<Record<string, unknown>>> {
-  const taskFn = async (taskPayload: TaskPayload, taskOpts?: TaskOptions) => {
+  const taskFn = async (taskArgs: TaskPayload, payload?: TaskOptions) => {
     const modulePayload = {
-      ...taskPayload,
+      ...(payload as Partial<ModulePayload>),
+      args: taskArgs as unknown as Record<string, unknown>,
       module: moduleName,
-    };
-    const backendResult = await dispatchTask(_context.backend, payload);
-    let hostResult = backendResult[payload.host.name];
+    } as ModulePayload;
+    const backendResult = await dispatchTask(_context.backend, modulePayload);
+    let hostResult = backendResult[modulePayload.host.name];
     if (!hostResult) {
       const firstKey = Object.keys(backendResult)[0];
       hostResult = firstKey

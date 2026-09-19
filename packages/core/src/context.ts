@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { ExecutionBackend, Host, Options, TaskOptions } from "./types.js";
 import { LocalBackend } from "./backends/local.js";
+import { localConnection } from "./connection.js";
 import { consoleCallback } from "./callbacks/console.js";
 import { backendContext } from "./backend-context.js";
 
@@ -61,7 +62,7 @@ export const _context = {
   log(message: string): void {
     const opts = _context.resolveOptions();
     for (const cb of opts.callbacks)
-      cb.onMessage?.(opts.host.name, message, _context.path);
+      cb.onMessage?.(message, { host: _context.host.name }, _context.path);
   },
 } as const;
 

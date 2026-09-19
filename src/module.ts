@@ -1,0 +1,198 @@
+import { LocalConnection } from "./connection.ts";
+import { Host } from "./host.ts";
+const ANSIBLE_VERSION = "2.17.x"; // the generated version const
+
+type Status = "ok" | "changed" | "failed" | "skipped";
+
+type ModuleSkippedResult<TReturn> = Partial<TReturn> & {
+  status: "skipped";
+  changed: false;
+  failed: false;
+  skipped: true;
+};
+
+const SKIPPED_RESULT: ModuleSkippedResult<unknown> = {
+  status: "skipped",
+  changed: false,
+  failed: false,
+  skipped: true,
+} as const;
+
+type ModuleRanResult<TReturn> = RawResult<TReturn> & {
+  status: Exclude<Status, "skipped">;
+  changed: boolean;
+  failed: false;
+  skipped: false;
+};
+
+type RawResult<TReturn> = TReturn & {
+  changed: boolean;
+  failed: boolean;
+  skipped: boolean;
+  invocation: Record<string, unknown>;
+  warnings?: string[];
+};
+
+type ModuleResult<TReturn> =
+  | ModuleRanResult<TReturn>
+  | ModuleSkippedResult<TReturn>;
+
+class ModuleError extends Error {
+  constructor(
+    fdcn: string,
+    public readonly result: RawResult<any>,
+  ) {
+    super(`Module ${fdcn} failed with result: ${JSON.stringify(result)}`);
+  }
+}
+
+const currentHost = () => {
+  return new Host("localhost", new LocalConnection());
+};
+
+interface ModuleMeta {
+  actionPlugin: boolean;
+  powershell: boolean;
+  rawParams: boolean;
+  checkMode: "full" | "partial" | "none" | "N/A";
+}
+
+interface ModuleExecOpts {
+  check?: boolean;
+  diff?: boolean;
+  noLog?: boolean;
+}
+
+class Module<TArgs extends Record<string, any>, TReturn> {
+  constructor(
+    public readonly fqcn: string,
+    private readonly moduleFqn: string,
+    private readonly meta: ModuleMeta,
+    private readonly zipdata: string,
+    private readonly deps: string[],
+  ) {}
+
+  async exec(
+    name: string | undefined,
+    args: TArgs,
+    opts: ModuleExecOpts = {},
+  ): Promise<ModuleResult<TReturn>> {
+    if (this.meta.actionPlugin)
+      throw new Error(`${this.fqcn} action plugin not implemented`);
+    if (this.meta.powershell)
+      throw new Error(`${this.fqcn} powershell module not supported`);
+
+    if (
+      opts.check &&
+      this.meta.checkMode !== "full" &&
+      this.meta.checkMode !== "partial"
+    )
+      return SKIPPED_RESULT;
+
+    const host = currentHost();
+
+    const a: Record<string, unknown> = { ...args };
+    if (this.meta.rawParams && "cmd" in a) {
+      a["_raw_params"] = a["cmd"];
+      delete a["cmd"];
+    }
+    const params = {
+      ANSIBLE_MODULE_ARGS: {
+        ...a,
+        _ansible_check_mode: opts.check ?? false,
+        _ansible_diff: opts.diff ?? false,
+        _ansible_no_log: opts.noLog ?? false,
+        _ansible_verbosity: 0,
+        _ansible_module_name: this.fqcn.split(".").at(-1),
+        _ansible_version: ANSIBLE_VERSION,
+        _ansible_remote_tmp: "~/.ansible/tmp",
+      },
+    };
+    const paramsJson = JSON.stringify(params);
+    const paramsBase64 = Buffer.from(paramsJson, "utf-8").toString("base64");
+    const wrapper = [
+      "import base64, os, runpy, sys, tempfile, atexit, shutil",
+      'tmp = tempfile.mkdtemp(prefix="ansiballz_")',
+      "atexit.register(shutil.rmtree, tmp, ignore_errors=True)",
+      'zp = os.path.join(tmp, "payload.zip")',
+      'with open(zp, "wb") as f:',
+      `    f.write(base64.b64decode("${this.zipdata}"))`,
+      "sys.path.insert(0, zp)",
+      "from ansible.module_utils import basic",
+      `basic._ANSIBLE_ARGS = base64.b64decode("${paramsBase64}")`,
+      `runpy.run_module("${this.moduleFqn}", run_name="__main__", alter_sys=True)`,
+    ].join("\n");
+    const raw: RawResult<TReturn> = await host.execPython(wrapper);
+
+    const failed = raw.failed === true;
+    const skipped = raw.skipped === true;
+    const changed = raw.changed === true;
+
+    let status: Status;
+    if (failed) status = "failed";
+    else if (skipped) status = "skipped";
+    else if (changed) status = "changed";
+    else status = "ok";
+
+    switch (status) {
+      case "failed":
+        throw new ModuleError(this.fqcn, raw); // fail-fast; see note
+      case "skipped":
+        return { ...raw, ...SKIPPED_RESULT };
+      default:
+        return {
+          ...raw,
+          status,
+          failed: false,
+          skipped: false,
+          changed,
+        };
+    }
+  }
+}
+
+type ModuleFn<TArgs, TReturn> = {} extends TArgs
+  ? {
+      (args?: TArgs, opts?: ModuleExecOpts): Promise<ModuleResult<TReturn>>;
+      (
+        name: string,
+        args?: TArgs,
+        opts?: ModuleExecOpts,
+      ): Promise<ModuleResult<TReturn>>;
+    }
+  : {
+      (args: TArgs, opts?: ModuleExecOpts): Promise<ModuleResult<TReturn>>;
+      (
+        name: string,
+        args: TArgs,
+        opts?: ModuleExecOpts,
+      ): Promise<ModuleResult<TReturn>>;
+    };
+
+export function defineModule<TArgs extends Record<string, any>, TReturn>(
+  fqcn: string,
+  moduleFqn: string,
+  meta: ModuleMeta,
+  zipdata: string,
+  deps: string[],
+): ModuleFn<TArgs, TReturn> {
+  const module = new Module<TArgs, TReturn>(
+    fqcn,
+    moduleFqn,
+    meta,
+    zipdata,
+    deps,
+  );
+  function invoke(
+    a?: string | TArgs,
+    b?: TArgs | ModuleExecOpts,
+    c?: ModuleExecOpts,
+  ) {
+    const named = typeof a === "string";
+    const name = named ? a : undefined;
+    const args = (named ? b : a) as TArgs | undefined;
+    const opts = (named ? c : b) as ModuleExecOpts | undefined;
+    return module.exec(name, (args ?? {}) as TArgs, opts ?? {});
+  }
+  return invoke as ModuleFn<TArgs, TReturn>;
+}

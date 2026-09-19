@@ -1,0 +1,8 @@
+[project]
+name = "ansible-nonesense"
+version = "0.1.0"
+description = "An Ansible collection for managing nonesense"
+requires-python = "==3.12.*"
+dependencies = [
+    "ansible-core==2.17.*",
+]

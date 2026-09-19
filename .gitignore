@@ -1,5 +1,7 @@
 node_modules/
 dist/
+generated/
+.venv/
 .devenv/
 .devenv.flake.nix
 .direnv/
@@ -7,3 +9,6 @@ devenv.lock
 inventory.yml
 inventory.yaml
 *.pyc
+*.md
+
+!README.md

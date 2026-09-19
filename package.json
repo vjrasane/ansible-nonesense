@@ -1,12 +1,17 @@
 {
+  "name": "@sensible-ts/core",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
-  "workspaces": [
-    "packages/core",
-    "packages/community"
-  ],
+  "exports": {
+    ".": {
+      "types": "./dist/module.d.ts",
+      "default": "./dist/module.js"
+    }
+  },
   "scripts": {
-    "build": "npm run build --workspaces",
+    "dev": "tsx",
+    "build": "tsc -p tsconfig.build.json",
     "test": "vitest run"
   },
   "devDependencies": {
@@ -14,7 +19,5 @@
     "typescript": "^5.8.0",
     "vitest": "^3.0.0",
     "@types/node": "^22.0.0"
-  },
-  "name": "",
-  "version": ""
+  }
 }
