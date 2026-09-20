@@ -10,7 +10,7 @@
     "allowImportingTsExtensions": true,
     "baseUrl": ".",
     "paths": {
-      "@sensible-ts/core": ["./src/module.ts"]
+      "@sensible-ts/core": ["./src/index.ts"]
     }
   },
   "exclude": ["node_modules"]

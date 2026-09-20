@@ -1,5 +1,5 @@
 import { Host } from "src/host.ts";
-import { ping } from "./generated/modules/ansible-builtin/index.ts";
+import { package_ } from "./generated/modules/ansible/builtin/index.ts";
 import { SSHConnection } from "src/connection.ts";
 
 const host = new Host(
@@ -10,6 +10,9 @@ const host = new Host(
 );
 
 host.run(async () => {
-  const res = await ping();
-  console.log(res.ping);
+  const res = await package_({
+    name: "curl",
+    state: "present",
+  });
+  console.log(res.changed);
 });

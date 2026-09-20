@@ -1,16 +1,19 @@
-import { LocalConnection } from "./connection.ts";
-import { currentContext } from "./context.ts";
-import { Host } from "./host.ts";
+import { currentContext } from "src/context.ts";
+import {
+  getModuleFn,
+  Module,
+  ModuleError,
+  ModuleExecOpts,
+  ModuleFn,
+  ModuleMeta,
+  ModuleResult,
+  ModuleSkippedResult,
+  ModuleStatus,
+  RawResult,
+} from "./module.ts";
+import { execPythonOnHost } from "src/host.ts";
+
 const ANSIBLE_VERSION = "2.17.x"; // the generated version const
-
-type Status = "ok" | "changed" | "failed" | "skipped";
-
-type ModuleSkippedResult<TReturn> = Partial<TReturn> & {
-  status: "skipped";
-  changed: false;
-  failed: false;
-  skipped: true;
-};
 
 const SKIPPED_RESULT: ModuleSkippedResult<unknown> = {
   status: "skipped",
@@ -19,50 +22,10 @@ const SKIPPED_RESULT: ModuleSkippedResult<unknown> = {
   skipped: true,
 } as const;
 
-type ModuleRanResult<TReturn> = RawResult<TReturn> & {
-  status: Exclude<Status, "skipped">;
-  changed: boolean;
-  failed: false;
-  skipped: false;
-};
-
-type RawResult<TReturn> = TReturn & {
-  changed: boolean;
-  failed: boolean;
-  skipped: boolean;
-  invocation: Record<string, unknown>;
-  warnings?: string[];
-};
-
-type ModuleResult<TReturn> =
-  | ModuleRanResult<TReturn>
-  | ModuleSkippedResult<TReturn>;
-
-class ModuleError extends Error {
-  constructor(
-    fdcn: string,
-    public readonly result: RawResult<any>,
-  ) {
-    super(`Module ${fdcn} failed with result: ${JSON.stringify(result)}`);
-  }
-}
-
-interface ModuleMeta {
-  actionPlugin: boolean;
-  powershell: boolean;
-  rawParams: boolean;
-  checkMode: "full" | "partial" | "none" | "N/A";
-}
-
-export interface ModuleExecOpts {
-  check?: boolean;
-  diff?: boolean;
-  noLog?: boolean;
-  become?: boolean;
-  env?: Record<string, string>;
-}
-
-class Module<TArgs extends Record<string, any>, TReturn> {
+export class TaskModule<
+  TArgs extends Record<string, any>,
+  TReturn,
+> implements Module<TArgs, TReturn> {
   constructor(
     public readonly fqcn: string,
     private readonly moduleFqn: string,
@@ -122,13 +85,13 @@ class Module<TArgs extends Record<string, any>, TReturn> {
       `basic._ANSIBLE_ARGS = base64.b64decode("${paramsBase64}")`,
       `runpy.run_module("${this.moduleFqn}", run_name="__main__", alter_sys=True)`,
     ].join("\n");
-    const raw: RawResult<TReturn> = await ctx.host.execPython(wrapper);
+    const raw: RawResult<TReturn> = await execPythonOnHost(ctx.host, wrapper);
 
     const failed = raw.failed === true;
     const skipped = raw.skipped === true;
     const changed = raw.changed === true;
 
-    let status: Status;
+    let status: ModuleStatus;
     if (failed) status = "failed";
     else if (skipped) status = "skipped";
     else if (changed) status = "changed";
@@ -151,48 +114,20 @@ class Module<TArgs extends Record<string, any>, TReturn> {
   }
 }
 
-type ModuleFn<TArgs, TReturn> = {} extends TArgs
-  ? {
-      (args?: TArgs, opts?: ModuleExecOpts): Promise<ModuleResult<TReturn>>;
-      (
-        name: string,
-        args?: TArgs,
-        opts?: ModuleExecOpts,
-      ): Promise<ModuleResult<TReturn>>;
-    }
-  : {
-      (args: TArgs, opts?: ModuleExecOpts): Promise<ModuleResult<TReturn>>;
-      (
-        name: string,
-        args: TArgs,
-        opts?: ModuleExecOpts,
-      ): Promise<ModuleResult<TReturn>>;
-    };
-
-export function defineModule<TArgs extends Record<string, any>, TReturn>(
+export function defineTaskModule<TArgs extends Record<string, any>, TReturn>(
   fqcn: string,
   moduleFqn: string,
   meta: ModuleMeta,
   zipdata: string,
   deps: string[],
 ): ModuleFn<TArgs, TReturn> {
-  const module = new Module<TArgs, TReturn>(
+  const mod = new TaskModule<TArgs, TReturn>(
     fqcn,
     moduleFqn,
     meta,
     zipdata,
     deps,
   );
-  function invoke(
-    a?: string | TArgs,
-    b?: TArgs | ModuleExecOpts,
-    c?: ModuleExecOpts,
-  ) {
-    const named = typeof a === "string";
-    const name = named ? a : undefined;
-    const args = (named ? b : a) as TArgs | undefined;
-    const opts = (named ? c : b) as ModuleExecOpts | undefined;
-    return module.exec(name, (args ?? {}) as TArgs, opts ?? {});
-  }
-  return invoke as ModuleFn<TArgs, TReturn>;
+
+  return getModuleFn(mod);
 }

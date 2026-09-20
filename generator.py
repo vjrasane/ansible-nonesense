@@ -11,6 +11,7 @@ from typing import Any, cast
 import keyword
 import sys
 import json
+import os
 
 REPO_ROOT = Path(__file__).parent
 GENERATED_DIR = REPO_ROOT / "generated"
@@ -45,6 +46,30 @@ ANSIBLE_TO_TS: dict[str, str] = {
     "sid": "string",
 }
 
+PKG_MGR_REGISTRY = {
+    "apt": "ansible.builtin.apt",
+    "dnf": "ansible.builtin.dnf",
+    "dnf5": "ansible.builtin.dnf5",
+    "apk": "community.general.apk",
+    "pacman": "community.general.pacman",
+    "zypper": "community.general.zypper"
+}
+
+SERVICE_MGR_REGISTRY = {
+    "systemd": "ansible.builtin.systemd",
+    "sysvinit": "ansible.builtin.sysvinit",
+    "openrc": "community.general.openrc"
+}
+
+DISPATCHERS = {
+    "ansible.builtin.package": {"impl": "definePackageModule", "fact": "ansible_pkg_mgr", "registry": PKG_MGR_REGISTRY},
+    "ansible.builtin.service":{ "impl": "defineServiceModule", "fact": "ansible_service_mgr", "registry": SERVICE_MGR_REGISTRY },
+}
+
+ACTIONS = {
+    # "ansible.builtin.reboot":{ "impl": "defineRebootModule" },
+}
+
 def ts_type(option: dict) -> str:
     choices = option.get("choices")
     if choices and all(isinstance(c, str) for c in choices):
@@ -77,7 +102,7 @@ def format_suboptions(suboptions: dict, indent: int = 2) -> str:
         lines.append(f"{pad}  {name}{suffix}: {t};")
     lines.append(f"{pad}}}")
     return "\n".join(lines)
-
+ 
 def safe_identifier(name: str) -> str:
     if name in JS_RESERVED or keyword.iskeyword(name):
         return f"{name}_"
@@ -104,7 +129,64 @@ def generate_interface(name: str, options: dict) -> str:
     lines.append("}")
     return "\n".join(lines)
 
-def generate_module_source(
+def emit_types(fqcn: str, doc: dict, returndocs: dict) -> tuple[str, str, str]: 
+    options = doc.get("options", {}) or {}
+    short_name = fqcn.rsplit(".", 1)[-1]
+    pascal = to_pascal(short_name)
+
+    return "\n".join([
+        generate_interface(f"{pascal}Args", options), 
+        generate_interface(f"{pascal}Return", returndocs)
+    ]), f"{pascal}Args", f"{pascal}Return"
+
+def get_module_tsfile_path(fqcn: str) -> Path:
+    parts = fqcn.split(".")
+    parts[-1] += parts[-1].endswith(".ts") and "" or ".ts"
+    return Path(MODULES_DIR, *parts)
+
+def relative_module_path(fqcn: str, dep: str) -> str:
+    mod_path = get_module_tsfile_path(fqcn)
+    dep_path = get_module_tsfile_path(dep) 
+
+    rel = os.path.relpath(dep_path, start=mod_path.parent)  
+    rel = rel.replace(os.sep, "/")                          
+
+    return rel if rel.startswith(".") else f"./{rel}"  
+
+def emit_dispatch(
+    fqcn: str,
+    meta: dict,
+    doc: dict,
+    returndocs: dict,
+) -> str:
+    short_name = fqcn.rsplit(".", 1)[-1]
+    fn_name = safe_identifier(short_name)
+
+    tdefs, targs, treturn = emit_types(fqcn, doc, returndocs)
+
+    override = DISPATCHERS.get(fqcn, {})
+    registry = override.get("registry", {})
+    fact = override.get("fact", "ansible_pkg_mgr")
+
+    return f'''// Auto-generated from: {fqcn}
+// DO NOT EDIT — regenerate with codegen
+
+import {{ defineDispatchModule, type DispatchRegistry }} from "@sensible-ts/core";
+
+const fqcn = "{fqcn}";
+const meta = {json.dumps(meta)} as const;
+const fact = "{fact}"
+
+{tdefs}
+
+const paths: Record<string, string> = {json.dumps({k: relative_module_path(fqcn, v) for k, v in registry.items()})}
+
+const registry: DispatchRegistry<{targs}, {treturn}> = {{ {",".join([f'"{k}": () => import(paths["{k}"]).then(m => m["{k}"])' for k in registry.keys()])} }} as const;
+
+export const {fn_name} = defineDispatchModule<{targs}, {treturn}>(fqcn, fact, registry);
+'''
+
+def emit_task(
     fqcn: str,
     module_fqn: str,
     meta: dict,
@@ -114,77 +196,40 @@ def generate_module_source(
     deps: list[Path]
 ) -> str:
     short_name = fqcn.rsplit(".", 1)[-1]
-    pascal = to_pascal(short_name)
     fn_name = safe_identifier(short_name)
 
-    options = doc.get("options", {}) or {}
-    deps_array = ",\n".join([f'"{d.relative_to(SOURCES_DIR)}"' for d in deps]);
+    tdefs, targs, treturn = emit_types(fqcn, doc, returndocs)
+
+    deps_array = ",".join([f'"{d.relative_to(SOURCES_DIR)}"' for d in deps]);
 
     return f'''// Auto-generated from: {fqcn}
 // DO NOT EDIT — regenerate with codegen
 
-import {{ defineModule }} from "@sensible-ts/core";
+import {{ defineTaskModule }} from "@sensible-ts/core";
 
 const fqcn = "{fqcn}";
 const moduleFqn = "{module_fqn}";
 const meta = {json.dumps(meta)} as const;
 
-const dependencies = [
-{deps_array}
-];
+const dependencies = [{deps_array}];
 
 const zipdata = "{zipdata.decode("utf-8")}";
 
-{generate_interface(f"{pascal}Args", options)}
+{tdefs}
 
-{generate_interface(f"{pascal}Return", returndocs)}
-
-export const {fn_name} = defineModule<{pascal}Args, {pascal}Return>(fqcn, moduleFqn, meta, zipdata, dependencies);
+export const {fn_name} = defineTaskModule<{targs}, {treturn}>(fqcn, moduleFqn, meta, zipdata, dependencies);
 '''
 
-# must precede lookup
-init_plugin_loader()                                    
 
-def generate_module(fqcn: str, collection: str, modules_dir: Path) -> Path | None:
-    short_name = fqcn.rsplit(".", 1)[-1]
-    print(f"  Generating {fqcn}...", file=sys.stderr)
 
-    ctx = module_loader.find_plugin_with_context(fqcn)
-    path = cast(str, ctx.plugin_resolved_path)
-    d, _, r, _ = get_docstring(
-        path, 
-        fragment_loader,
-        plugin_type="module",
-        collection_name=collection,
-    )
-    doc = cast(dict, d)
-    returndocs = cast(dict, r or {})
-    attrs = doc.get("attributes") or {}
 
-    action_plugin = action_loader.find_plugin_with_context(fqcn).resolved
-    powershell    = path.endswith(".ps1")
-    raw_params    = "free_form" in (doc.get("options") or {})
-    check_mode    = (attrs.get("check_mode", {}) or {}).get("support", "none")
-
-    meta = {
-        "actionPlugin": action_plugin,
-        "powershell": powershell,
-        "rawParams": raw_params,
-        "checkMode": check_mode,
-    }
-
-    templar = Templar(loader=DataLoader())
-    data, style, shebang = modify_module(
-        fqcn,
-        path,
-        {},                                                    # sentinel args; closure is import-based, values irrelevant
-        templar,
-        task_vars={"ansible_python_interpreter": "/usr/bin/python3"},  
-    )
-    if style != "new":
-        print(f"  Skipping {fqcn}: style={style}", file=sys.stderr)
-        return None
-
+def generate_module_source(
+    data: bytes,
+    fqcn: str,
+    meta: dict,
+    doc: dict,
+    returndocs: dict
+) -> str: 
     src = data.decode("utf-8")
     tree = ast.parse(src)
 
@@ -226,7 +271,56 @@ def generate_module(fqcn: str, collection: str, modules_dir: Path) -> Path | Non
     if module_fqn is None:
         raise Exception(f"Could not find run_module entrypoint in wrapper for {fqcn}")
 
-    source = generate_module_source(fqcn, module_fqn, meta, doc, returndocs, zipdata, deps)
+    source = emit_task(fqcn, module_fqn, meta, doc, returndocs, zipdata, deps)
+
+    return source
+
+# must precede lookup
+init_plugin_loader()                                    
+
+def generate_module(fqcn: str, collection: str, modules_dir: Path) -> Path | None:
+    short_name = fqcn.rsplit(".", 1)[-1]
+    print(f"  Generating {fqcn}...", file=sys.stderr)
+
+    ctx = module_loader.find_plugin_with_context(fqcn)
+    path = cast(str, ctx.plugin_resolved_path)
+    d, _, r, _ = get_docstring(
+        path, 
+        fragment_loader,
+        plugin_type="module",
+        collection_name=collection,
+    )
+    doc = cast(dict, d)
+    returndocs = cast(dict, r or {})
+    attrs = doc.get("attributes") or {}
+
+    action_plugin = action_loader.find_plugin_with_context(fqcn).resolved
+    powershell    = path.endswith(".ps1")
+    raw_params    = "free_form" in (doc.get("options") or {})
+    check_mode    = (attrs.get("check_mode", {}) or {}).get("support", "none")
+
+    meta = {
+        "actionPlugin": action_plugin,
+        "powershell": powershell,
+        "rawParams": raw_params,
+        "checkMode": check_mode,
+    }
+
+    templar = Templar(loader=DataLoader())
+    data, style, shebang = modify_module(
+        fqcn,
+        path,
+        {},                                                    # sentinel args; closure is import-based, values irrelevant
+        templar,
+        task_vars={"ansible_python_interpreter": "/usr/bin/python3"},  
+    )
+    if fqcn in DISPATCHERS:
+        source = emit_dispatch(fqcn, meta, doc, returndocs)     
+    elif style != "new":
+        print(f"  Skipping {fqcn}: style={style}", file=sys.stderr)
+        return None
+    else:
+        source = generate_module_source(data, fqcn, meta, doc, returndocs)
 
     output_path = Path(modules_dir, f"{short_name}.ts")
     output_path.write_text(source)
@@ -234,19 +328,13 @@ def generate_module(fqcn: str, collection: str, modules_dir: Path) -> Path | Non
     return Path(output_path)
 
 
-def main():
-    if len(sys.argv) < 2:
-        print(f"Usage: {sys.argv[0]} <collection>", file=sys.stderr)
-        sys.exit(1)
-
-    collection = sys.argv[1]
-
+def generate_collection(collection: str):
     module_names = list_plugins("module", collection).keys()
     if not module_names:
         print(f"No modules found for collection: {collection}", file=sys.stderr)
         sys.exit(1)
 
-    modules_dir = Path(GENERATED_DIR, MODULES_DIR, "-".join(collection.split(".")))
+    modules_dir = Path(GENERATED_DIR, MODULES_DIR, *collection.split("."))
     modules_dir.mkdir(parents=True, exist_ok=True)
             
     module_paths = []
@@ -268,6 +356,9 @@ def main():
     ])
     (modules_dir / "index.ts").write_text(barrel)
 
+def main():
+    generate_collection("ansible.builtin")
+    generate_collection("community.general")
 
 if __name__ == "__main__":
     main()
