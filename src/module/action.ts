@@ -12,6 +12,10 @@ import {
   ModuleStatus,
   RawResult,
 } from "./module.ts";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { packageName } from "src/config.ts";
+import { dirname } from "node:path";
 
 type ActionFn<TArgs, TReturn> = (
   args: TArgs,
@@ -85,6 +89,16 @@ interface CopyArgs {
   validate?: string;
 }
 
+async function writeLocalTemp(
+  content: string,
+  name: string = "content",
+): Promise<string> {
+  const dir = await mkdtemp(join(tmpdir(), packageName + "-"));
+  const path = join(dir, name);
+  await writeFile(path, content);
+  return path;
+}
+
 export async function copyAction<TReturn>(
   args: CopyArgs,
   opts: ModuleExecOpts | undefined,
@@ -92,7 +106,15 @@ export async function copyAction<TReturn>(
 ): Promise<ModuleResult<TReturn>> {
   const host = currentHost();
   const src =
-    args.content !== undefined ? await writeLocalTemp(args.content) : args.src;
+    args.content != null ? await writeLocalTemp(args.content) : args.src;
+
+  if (!src)
+    throw new ModuleError(
+      "ansible.builtin.copy",
+      `source or content must be defined`,
+    );
+
+  const localDir = dirname(src);
   const tmp = await host.makeTmpPath();
   try {
     const rsrc = join(tmp, basename(src));
@@ -108,8 +130,22 @@ export async function copyAction<TReturn>(
     return await mod(margs, opts);
   } finally {
     await host.cleanup(tmp);
+    if (args.content !== undefined)
+      await rm(localDir, { recursive: true, force: true });
   }
 }
+export interface FetchArgs {
+  dest: string;
+  fail_on_missing?: boolean;
+  flat?: boolean;
+  src: string;
+  validate_checksum?: boolean;
+}
+
+export async function fetchAction<TReturn>(
+  args: FetchArgs,
+  opts: ModuleExecOpts | undefined,
+): Promise<ModuleResult<TReturn>> {}
 
 export function defineActionModule<TArgs extends Record<string, any>, TReturn>(
   fqcn: string,
@@ -117,6 +153,13 @@ export function defineActionModule<TArgs extends Record<string, any>, TReturn>(
   mod: ModuleFn<TArgs, TReturn>,
 ): ModuleFn<TArgs, TReturn> {
   const act = new ActionModule<TArgs, TReturn>(fqcn, impl, mod);
-
   return getModuleFn(fqcn, act);
+}
+
+export function defineControllerModule<
+  TArgs extends Record<string, any>,
+  TReturn,
+>(fqcn: string, impl: ControllerFn<TArgs, TReturn>): ModuleFn<TArgs, TReturn> {
+  const mod = new ControllerModule<TArgs, TReturn>(fqcn, impl);
+  return getModuleFn(fqcn, mod);
 }

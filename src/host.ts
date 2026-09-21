@@ -56,6 +56,11 @@ export class Host implements HostRef {
     return this.pythonInterpreter;
   }
 
+  async makeTmpPath(): Promise<string> {
+    const { stdout } = await this.connection.exec(["mktemp", "-d"]);
+    return stdout.trim();
+  }
+
   private async discoverInterpreter(): Promise<string> {
     if (this.opts.pythonPath) return this.opts.pythonPath;
     const { rc, stdout } = await this.connection.exec([

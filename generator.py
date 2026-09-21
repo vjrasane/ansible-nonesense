@@ -161,6 +161,7 @@ def emit_codegen_preamble(fqcn: str) -> str:
 defineRemoteModule = "defineRemoteModule"
 defineActionModule = "defineActionModule"
 defineDispatchModule = "defineDispatchModule"
+defineControllerModule = "defineControllerModule"
 
 def emit_action_module(
     fqcn: str,
@@ -212,14 +213,14 @@ def emit_controller_module(
     tdefs, targs, treturn = emit_types(fqcn, doc, returndocs)
 
     return f'''{emit_codegen_preamble(fqcn)}
-import {{ {defineActionModule}, {impl} }} from "@sensible-ts/core";
+import {{ {defineControllerModule}, {impl} }} from "@sensible-ts/core";
 
 const fqcn = "{fqcn}";
 const meta = {json.dumps(meta)} as const;
 
 {tdefs}
 
-export const {fn_name} = {defineActionModule}<{targs}, {treturn}>(fqcn, {impl});
+export const {fn_name} = {defineControllerModule}<{targs}, {treturn}>(fqcn, {impl});
 '''
 
 def emit_dispatch_module(
