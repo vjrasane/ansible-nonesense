@@ -62,12 +62,13 @@ SERVICE_MGR_REGISTRY = {
 }
 
 DISPATCHERS = {
-    "ansible.builtin.package": {"impl": "definePackageModule", "fact": "ansible_pkg_mgr", "registry": PKG_MGR_REGISTRY},
-    "ansible.builtin.service":{ "impl": "defineServiceModule", "fact": "ansible_service_mgr", "registry": SERVICE_MGR_REGISTRY },
+    "ansible.builtin.package": {"fact": "ansible_pkg_mgr", "registry": PKG_MGR_REGISTRY},
+    "ansible.builtin.service": {"fact": "ansible_service_mgr", "registry": SERVICE_MGR_REGISTRY },
 }
 
 ACTIONS = {
-    # "ansible.builtin.reboot":{ "impl": "defineRebootModule" },
+ "ansible.builtin.copy": {"impl": "copyAction"},
+ "ansible.builtin.fetch": {"impl": "fetchAction"},
 }
 
 def ts_type(option: dict) -> str:
@@ -151,9 +152,77 @@ def relative_module_path(fqcn: str, dep: str) -> str:
     rel = os.path.relpath(dep_path, start=mod_path.parent)  
     rel = rel.replace(os.sep, "/")                          
 
-    return rel if rel.startswith(".") else f"./{rel}"  
+    return rel if rel.startswith(".") else f"./{rel}"
 
-def emit_dispatch(
+def emit_codegen_preamble(fqcn: str) -> str:
+    return f"""// Auto-generated from: {fqcn}
+// DO NOT EDIT — regenerate with codegen"""
+
+defineRemoteModule = "defineRemoteModule"
+defineActionModule = "defineActionModule"
+defineDispatchModule = "defineDispatchModule"
+
+def emit_action_module(
+    fqcn: str,
+    module_fqn: str,
+    meta: dict,
+    doc: dict,
+    returndocs: dict,
+    zipdata: bytes,
+    deps: list[Path]
+) -> str:
+    short_name = fqcn.rsplit(".", 1)[-1]
+    fn_name = safe_identifier(short_name)
+
+    override = ACTIONS[fqcn]
+    impl = override["impl"]
+
+    tdefs, targs, treturn = emit_types(fqcn, doc, returndocs)
+
+    return f'''{emit_codegen_preamble(fqcn)}
+import {{ {defineRemoteModule}, {defineActionModule}, {impl} }} from "@sensible-ts/core";
+
+const fqcn = "{fqcn}";
+const moduleFqn = "{module_fqn}";
+const meta = {json.dumps(meta)} as const;
+
+const dependencies = [{",".join([f'"{d.relative_to(SOURCES_DIR)}"' for d in deps])}];
+
+const zipdata = "{zipdata.decode("utf-8")}";
+
+{tdefs}
+
+const mod = {defineRemoteModule}<{targs}, {treturn}>(fqcn, moduleFqn, meta, zipdata, dependencies)
+
+export const {fn_name} = {defineActionModule}<{targs}, {treturn}>(fqcn, {impl}, mod);
+'''
+
+def emit_controller_module(
+    fqcn: str,
+    meta: dict,
+    doc: dict,
+    returndocs: dict,
+) -> str:
+    short_name = fqcn.rsplit(".", 1)[-1]
+    fn_name = safe_identifier(short_name)
+
+    override = ACTIONS[fqcn]
+    impl = override["impl"]
+
+    tdefs, targs, treturn = emit_types(fqcn, doc, returndocs)
+
+    return f'''{emit_codegen_preamble(fqcn)}
+import {{ {defineActionModule}, {impl} }} from "@sensible-ts/core";
+
+const fqcn = "{fqcn}";
+const meta = {json.dumps(meta)} as const;
+
+{tdefs}
+
+export const {fn_name} = {defineActionModule}<{targs}, {treturn}>(fqcn, {impl});
+'''
+
+def emit_dispatch_module(
     fqcn: str,
     meta: dict,
     doc: dict,
@@ -166,12 +235,10 @@ def emit_dispatch(
 
     override = DISPATCHERS.get(fqcn, {})
     registry = override.get("registry", {})
-    fact = override.get("fact", "ansible_pkg_mgr")
+    fact = override.get("fact")
 
-    return f'''// Auto-generated from: {fqcn}
-// DO NOT EDIT — regenerate with codegen
-
-import {{ defineDispatchModule, type DispatchRegistry }} from "@sensible-ts/core";
+    return f'''{emit_codegen_preamble(fqcn)}
+import {{ {defineDispatchModule}, type DispatchRegistry }} from "@sensible-ts/core";
 
 const fqcn = "{fqcn}";
 const meta = {json.dumps(meta)} as const;
@@ -183,10 +250,10 @@ const paths: Record<string, string> = {json.dumps({k: relative_module_path(fqcn,
 
 const registry: DispatchRegistry<{targs}, {treturn}> = {{ {",".join([f'"{k}": () => import(paths["{k}"]).then(m => m["{k}"])' for k in registry.keys()])} }} as const;
 
-export const {fn_name} = defineDispatchModule<{targs}, {treturn}>(fqcn, fact, registry);
+export const {fn_name} = {defineDispatchModule}<{targs}, {treturn}>(fqcn, fact, registry);
 '''
 
-def emit_task(
+def emit_remote_module(
     fqcn: str,
     module_fqn: str,
     meta: dict,
@@ -200,36 +267,28 @@ def emit_task(
 
     tdefs, targs, treturn = emit_types(fqcn, doc, returndocs)
 
-    deps_array = ",".join([f'"{d.relative_to(SOURCES_DIR)}"' for d in deps]);
+    define = "defineRemoteModule"
 
     return f'''// Auto-generated from: {fqcn}
 // DO NOT EDIT — regenerate with codegen
 
-import {{ defineTaskModule }} from "@sensible-ts/core";
+import {{ {define} }} from "@sensible-ts/core";
 
 const fqcn = "{fqcn}";
 const moduleFqn = "{module_fqn}";
 const meta = {json.dumps(meta)} as const;
 
-const dependencies = [{deps_array}];
+const dependencies = [{",".join([f'"{d.relative_to(SOURCES_DIR)}"' for d in deps])}];
 
 const zipdata = "{zipdata.decode("utf-8")}";
 
 {tdefs}
 
-export const {fn_name} = defineTaskModule<{targs}, {treturn}>(fqcn, moduleFqn, meta, zipdata, dependencies);
+export const {fn_name} = {define}<{targs}, {treturn}>(fqcn, moduleFqn, meta, zipdata, dependencies);
 '''
 
 
-
-
-def generate_module_source(
-    data: bytes,
-    fqcn: str,
-    meta: dict,
-    doc: dict,
-    returndocs: dict
-) -> str: 
+def extract_zipdata(data: bytes) -> tuple[bytes, str, list[Path]]:
     src = data.decode("utf-8")
     tree = ast.parse(src)
 
@@ -242,7 +301,7 @@ def generate_module_source(
         None
     )
     if zipdata is None:
-        raise Exception(f"Could not find ZIPDATA in wrapper for {fqcn}")
+        raise Exception(f"Could not find ZIPDATA in wrapper")
 
     if isinstance(zipdata, str):
         zipdata = zipdata.encode("ascii")
@@ -269,11 +328,9 @@ def generate_module_source(
         None
     )
     if module_fqn is None:
-        raise Exception(f"Could not find run_module entrypoint in wrapper for {fqcn}")
+        raise Exception(f"Could not find run_module entrypoint in wrapper")
 
-    source = emit_task(fqcn, module_fqn, meta, doc, returndocs, zipdata, deps)
-
-    return source
+    return zipdata, module_fqn, deps
 
 # must precede lookup
 init_plugin_loader()                                    
@@ -307,20 +364,27 @@ def generate_module(fqcn: str, collection: str, modules_dir: Path) -> Path | Non
     }
 
     templar = Templar(loader=DataLoader())
-    data, style, shebang = modify_module(
+    data, style, _ = modify_module(
         fqcn,
         path,
-        {},                                                    # sentinel args; closure is import-based, values irrelevant
+        {}, # sentinel args; closure is import-based, values irrelevant
         templar,
         task_vars={"ansible_python_interpreter": "/usr/bin/python3"},  
     )
-    if fqcn in DISPATCHERS:
-        source = emit_dispatch(fqcn, meta, doc, returndocs)     
-    elif style != "new":
+
+    if fqcn in ACTIONS and style == "new":
+        zipdata, module_fqn, deps = extract_zipdata(data)
+        source = emit_action_module(fqcn, module_fqn, meta, doc, returndocs, zipdata, deps)
+    elif fqcn in ACTIONS and style != "new":
+        source = emit_controller_module(fqcn, meta, doc, returndocs)
+    elif fqcn in DISPATCHERS:
+        source = emit_dispatch_module(fqcn, meta, doc, returndocs)     
+    elif style == "new":
+        zipdata, module_fqn, deps = extract_zipdata(data)
+        source = emit_remote_module(fqcn, module_fqn, meta, doc, returndocs, zipdata, deps)
+    else:
         print(f"  Skipping {fqcn}: style={style}", file=sys.stderr)
         return None
-    else:
-        source = generate_module_source(data, fqcn, meta, doc, returndocs)
 
     output_path = Path(modules_dir, f"{short_name}.ts")
     output_path.write_text(source)

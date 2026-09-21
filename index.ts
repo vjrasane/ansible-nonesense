@@ -1,15 +1,11 @@
-import { Host } from "src/host.ts";
+import { host } from "src/host.ts";
 import { package_ } from "./generated/modules/ansible/builtin/index.ts";
-import { SSHConnection } from "src/connection.ts";
 
-const host = new Host(
-  "rpi5-01",
-  new SSHConnection({
-    host: "rpi5-01",
-  }),
-);
+const rpi = host("rpi5-01", {
+  host: "rpi5-01",
+});
 
-host.run(async () => {
+rpi.run(async () => {
   const res = await package_({
     name: "curl",
     state: "present",

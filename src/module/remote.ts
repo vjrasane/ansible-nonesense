@@ -114,7 +114,7 @@ export class TaskModule<
   }
 }
 
-export function defineTaskModule<TArgs extends Record<string, any>, TReturn>(
+export function defineRemoteModule<TArgs extends Record<string, any>, TReturn>(
   fqcn: string,
   moduleFqn: string,
   meta: ModuleMeta,
@@ -129,5 +129,5 @@ export function defineTaskModule<TArgs extends Record<string, any>, TReturn>(
     deps,
   );
 
-  return getModuleFn(mod);
+  return getModuleFn(fqcn, mod);
 }

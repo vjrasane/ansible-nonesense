@@ -68,5 +68,5 @@ export function defineDispatchModule<TArgs extends DispatchArgs, TReturn>(
   registry: DispatchRegistry<TArgs, TReturn>,
 ): ModuleFn<TArgs, TReturn> {
   const mod = new DispatchModule<TArgs, TReturn>(fqcn, factName, registry);
-  return getModuleFn(mod);
+  return getModuleFn(fqcn, mod);
 }

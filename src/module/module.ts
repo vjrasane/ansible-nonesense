@@ -1,3 +1,5 @@
+import { withSpan } from "src/context.ts";
+
 export type ModuleStatus = "ok" | "changed" | "failed" | "skipped";
 
 export type ModuleSkippedResult<TReturn> = Partial<TReturn> & {
@@ -77,8 +79,9 @@ export type ModuleFn<TArgs, TReturn> = {} extends TArgs
     };
 
 export function getModuleFn<TArgs extends Record<string, any>, TReturn>(
+  fqcn: string,
   mod: Module<TArgs, TReturn>,
-) {
+): ModuleFn<TArgs, TReturn> {
   function fn(
     a?: string | TArgs,
     b?: TArgs | ModuleExecOpts,
@@ -88,7 +91,9 @@ export function getModuleFn<TArgs extends Record<string, any>, TReturn>(
     const name = named ? a : undefined;
     const args = (named ? b : a) as TArgs | undefined;
     const opts = (named ? c : b) as ModuleExecOpts | undefined;
-    return mod.exec(name, (args ?? {}) as TArgs, opts ?? {});
+    return withSpan("step", name ?? fqcn, () =>
+      mod.exec(name, (args ?? {}) as TArgs, opts),
+    );
   }
   return fn;
 }

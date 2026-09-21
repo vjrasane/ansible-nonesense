@@ -1,8 +1,14 @@
 import { readFileSync } from "node:fs";
-import { Connection, LocalConnection } from "./connection.ts";
-import { withHost } from "./context.ts";
+import {
+  Connection,
+  LocalConnection,
+  SSHConfig,
+  SSHConnection,
+} from "src/connection.ts";
+import { withContext } from "src/context.ts";
+import { Runner, defaultRunner } from "src/runner.ts";
 
-type HostConfig = {
+type HostOpts = {
   pythonPath?: string;
 };
 
@@ -17,16 +23,26 @@ const FACT_PROBE = readFileSync(
   "utf-8",
 );
 
-export class Host {
+export interface HostRef {
+  readonly name: string;
+  run<T>(fn: () => Promise<T>): Promise<T>;
+}
+
+export class Host implements HostRef {
   private pythonInterpreter: Promise<string> | null;
   private ansibleFacts: Promise<HostFacts> | null = null;
 
   constructor(
     public readonly name: string,
     public readonly connection: Connection,
-    private readonly config: HostConfig = {},
+    private readonly opts: HostOpts = {},
+    public readonly explicitRunner?: Runner,
   ) {
     this.pythonInterpreter = null;
+  }
+
+  private get runner(): Runner {
+    return this.explicitRunner ?? defaultRunner;
   }
 
   get facts(): Promise<HostFacts> {
@@ -41,7 +57,7 @@ export class Host {
   }
 
   private async discoverInterpreter(): Promise<string> {
-    if (this.config.pythonPath) return this.config.pythonPath;
+    if (this.opts.pythonPath) return this.opts.pythonPath;
     const { rc, stdout } = await this.connection.exec([
       "/bin/sh",
       "-c",
@@ -83,7 +99,7 @@ export class Host {
   }
 
   run<T>(fn: () => Promise<T>): Promise<T> {
-    return withHost(this, fn);
+    return this.runner.run(() => withContext({ host: this, opts: {} }, fn));
   }
 }
 
@@ -105,4 +121,16 @@ export async function execPythonOnHost(
       `Failed to parse Python output: ${String(err)}\nRC: ${rc}\nStdout: ${stdout}\nStderr: ${stderr}`,
     );
   }
+}
+
+interface RemoteHostConfig extends SSHConfig, HostOpts {}
+
+interface LocalHostConfig extends HostOpts {}
+
+export type HostConfig = RemoteHostConfig | LocalHostConfig;
+
+export function host(name: string, cfg?: HostConfig, runner?: Runner): HostRef {
+  if (!cfg || !("host" in cfg))
+    return new Host(name, new LocalConnection(), cfg, runner);
+  return new Host(name, new SSHConnection(cfg), cfg, runner);
 }
