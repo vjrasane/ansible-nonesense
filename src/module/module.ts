@@ -1,4 +1,4 @@
-import { withSpan } from "src/context.ts";
+import { withOptions, withSpan } from "src/context.ts";
 
 export type ModuleStatus = "ok" | "changed" | "failed" | "skipped";
 
@@ -37,12 +37,7 @@ export class ModuleError extends Error {
   }
 }
 
-export interface ModuleMeta {
-  actionPlugin: boolean;
-  powershell: boolean;
-  rawParams: boolean;
-  checkMode: "full" | "partial" | "none" | "N/A";
-}
+export interface ModuleSpec {}
 
 export interface ModuleExecOpts {
   check?: boolean;
@@ -53,6 +48,7 @@ export interface ModuleExecOpts {
 }
 
 export interface Module<TArgs extends Record<string, any>, TReturn> {
+  displayName: string;
   exec(
     name: string | undefined,
     args: TArgs,
@@ -78,8 +74,15 @@ export type ModuleFn<TArgs, TReturn> = {} extends TArgs
       ): Promise<ModuleResult<TReturn>>;
     };
 
+export interface AnsibleModuleMeta {
+  fqcn: string;
+  actionPlugin: boolean;
+  powershell: boolean;
+  rawParams: boolean;
+  checkMode: "full" | "partial" | "none" | "N/A";
+}
+
 export function getModuleFn<TArgs extends Record<string, any>, TReturn>(
-  fqcn: string,
   mod: Module<TArgs, TReturn>,
 ): ModuleFn<TArgs, TReturn> {
   function fn(
@@ -91,9 +94,27 @@ export function getModuleFn<TArgs extends Record<string, any>, TReturn>(
     const name = named ? a : undefined;
     const args = (named ? b : a) as TArgs | undefined;
     const opts = (named ? c : b) as ModuleExecOpts | undefined;
-    return withSpan("step", name ?? fqcn, () =>
+    return withSpan("step", name ?? mod.displayName, () =>
       mod.exec(name, (args ?? {}) as TArgs, opts),
     );
   }
   return fn;
+}
+
+export function define<
+  TFunc extends (...args: any[]) => Promise<TReturn>,
+  TReturn,
+>(
+  name: string,
+  fn: TFunc,
+  opts?: ModuleExecOpts,
+): (...args: Parameters<TFunc>) => Promise<TReturn> {
+  return async (...args: Parameters<TFunc>): Promise<TReturn> => {
+    const { value } = await withSpan("step", name, () =>
+      withOptions(opts ?? {}, () =>
+        fn(args).then((value) => ({ value, status: "ok", changed: undefined })),
+      ),
+    );
+    return value;
+  };
 }

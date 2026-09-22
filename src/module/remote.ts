@@ -1,16 +1,16 @@
 import { currentContext } from "src/context.ts";
 import {
+  AnsibleModuleMeta,
   getModuleFn,
   Module,
   ModuleError,
   ModuleExecOpts,
   ModuleFn,
-  ModuleMeta,
   ModuleResult,
   ModuleSkippedResult,
   ModuleStatus,
   RawResult,
-} from "./module.ts";
+} from "src/module/module.ts";
 import { execPythonOnHost } from "src/host.ts";
 
 const ANSIBLE_VERSION = "2.17.x"; // the generated version const
@@ -22,17 +22,24 @@ const SKIPPED_RESULT: ModuleSkippedResult<unknown> = {
   skipped: true,
 } as const;
 
-export class TaskModule<
+export interface RemoteModuleSpec {
+  moduleFqn: string;
+  zipdata: string;
+  deps: string[];
+}
+
+export class RemoteModule<
   TArgs extends Record<string, any>,
   TReturn,
 > implements Module<TArgs, TReturn> {
   constructor(
-    public readonly fqcn: string,
-    private readonly moduleFqn: string,
-    private readonly meta: ModuleMeta,
-    private readonly zipdata: string,
-    private readonly deps: string[],
+    private readonly spec: RemoteModuleSpec,
+    public readonly meta: AnsibleModuleMeta,
   ) {}
+
+  get displayName(): string {
+    return this.meta.fqcn;
+  }
 
   async exec(
     name: string | undefined,
@@ -43,9 +50,9 @@ export class TaskModule<
     const mergedOpts = { ...ctx.opts, ...moduleOpts };
 
     if (this.meta.actionPlugin)
-      throw new Error(`${this.fqcn} action plugin not implemented`);
+      throw new Error(`${this.meta.fqcn} action plugin not implemented`);
     if (this.meta.powershell)
-      throw new Error(`${this.fqcn} powershell module not supported`);
+      throw new Error(`${this.meta.fqcn} powershell module not supported`);
 
     if (
       mergedOpts.check &&
@@ -66,7 +73,7 @@ export class TaskModule<
         _ansible_diff: mergedOpts.diff ?? false,
         _ansible_no_log: mergedOpts.noLog ?? false,
         _ansible_verbosity: 0,
-        _ansible_module_name: this.fqcn.split(".").at(-1),
+        _ansible_module_name: this.meta.fqcn.split(".").at(-1),
         _ansible_version: ANSIBLE_VERSION,
         _ansible_remote_tmp: "~/.ansible/tmp",
       },
@@ -79,11 +86,11 @@ export class TaskModule<
       "atexit.register(shutil.rmtree, tmp, ignore_errors=True)",
       'zp = os.path.join(tmp, "payload.zip")',
       'with open(zp, "wb") as f:',
-      `    f.write(base64.b64decode("${this.zipdata}"))`,
+      `    f.write(base64.b64decode("${this.spec.zipdata}"))`,
       "sys.path.insert(0, zp)",
       "from ansible.module_utils import basic",
       `basic._ANSIBLE_ARGS = base64.b64decode("${paramsBase64}")`,
-      `runpy.run_module("${this.moduleFqn}", run_name="__main__", alter_sys=True)`,
+      `runpy.run_module("${this.spec.moduleFqn}", run_name="__main__", alter_sys=True)`,
     ].join("\n");
     const raw: RawResult<TReturn> = await execPythonOnHost(ctx.host, wrapper);
 
@@ -99,7 +106,7 @@ export class TaskModule<
 
     switch (status) {
       case "failed":
-        throw new ModuleError(this.fqcn, raw); // fail-fast; see note
+        throw new ModuleError(this.meta.fqcn, raw); // fail-fast; see note
       case "skipped":
         return { ...raw, ...SKIPPED_RESULT };
       default:
@@ -115,19 +122,9 @@ export class TaskModule<
 }
 
 export function defineRemoteModule<TArgs extends Record<string, any>, TReturn>(
-  fqcn: string,
-  moduleFqn: string,
-  meta: ModuleMeta,
-  zipdata: string,
-  deps: string[],
+  spec: RemoteModuleSpec,
+  meta: AnsibleModuleMeta,
 ): ModuleFn<TArgs, TReturn> {
-  const mod = new TaskModule<TArgs, TReturn>(
-    fqcn,
-    moduleFqn,
-    meta,
-    zipdata,
-    deps,
-  );
-
-  return getModuleFn(fqcn, mod);
+  const mod = new RemoteModule<TArgs, TReturn>(spec, meta);
+  return getModuleFn(mod);
 }

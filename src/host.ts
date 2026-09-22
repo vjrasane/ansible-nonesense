@@ -12,11 +12,11 @@ type HostOpts = {
   pythonPath?: string;
 };
 
-export type HostFacts = {
+export interface HostFacts {
   ansible_service_mgr: string;
   ansible_pkg_mgr: string;
   ansible_system: string;
-};
+}
 
 const FACT_PROBE = readFileSync(
   new URL("../scripts/fact-probe.sh", import.meta.url),
@@ -58,7 +58,7 @@ export class Host implements HostRef {
 
   async makeTmpPath(): Promise<string> {
     const { stdout } = await this.connection.exec(["mktemp", "-d"]);
-    return stdout.trim();
+    return stdout.toString().trim();
   }
 
   private async discoverInterpreter(): Promise<string> {
@@ -68,7 +68,7 @@ export class Host implements HostRef {
       "-c",
       "command -v python3 || command -v python",
     ]);
-    const path = stdout.trim();
+    const path = stdout.toString().trim();
     if (rc !== 0 || !path)
       throw new Error(`Python interpreter not found on ${this.name}`);
     return path;
@@ -83,7 +83,7 @@ export class Host implements HostRef {
     if (rc !== 0)
       throw new Error(`fact probe failed on ${this.name}: rc=${rc} ${stderr}`);
     const facts: Partial<HostFacts> = {};
-    for (const line of stdout.trim().split("\n")) {
+    for (const line of stdout.toString().trim().split("\n")) {
       const i = line.indexOf("=");
       const key = line.slice(0, i);
       const value = line.slice(i + 1);
@@ -119,7 +119,7 @@ export async function execPythonOnHost(
     stdin: Buffer.from(script),
   });
   try {
-    const result = JSON.parse(stdout);
+    const result = JSON.parse(stdout.toString());
     return result;
   } catch (err) {
     throw new Error(

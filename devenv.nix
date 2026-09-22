@@ -1,4 +1,4 @@
-{ pkgs, ... }:
+{ pkgs, config, ... }:
 
 {
   languages.typescript.enable = true;
@@ -13,8 +13,32 @@
   };
 
   packages = with pkgs; [
-    nodejs_25
-
+    nodejs_26
     just
   ];
+
+  env.ANSIBLE_COLLECTIONS_PATH = "${config.env.DEVENV_ROOT}/collections";
+
+  tasks = {
+    "ansible:install" = {
+      exec = ''
+        stamp="${config.env.DEVENV_STATE}/galaxy.stamp"
+        if [ requirements.yml -nt "$stamp" ]; then
+          ansible-galaxy collection install -r requirements.yml && touch "$stamp"
+        fi
+      '';
+      execIfModified = [
+        "requirements.yml"
+      ];
+      after = [ "devenv:enterShell" ];
+    };
+    "npm:install" = {
+      exec = "npm install";
+      execIfModified = [
+        "package.json"
+        "package-lock.json"
+      ];
+      after = [ "devenv:enterShell" ];
+    };
+  };
 }

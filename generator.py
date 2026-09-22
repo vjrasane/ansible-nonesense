@@ -6,7 +6,7 @@ from ansible.utils.plugin_docs import get_docstring
 from ansible.executor.module_common import modify_module
 from ansible.template import Templar
 from ansible.parsing.dataloader import DataLoader
-from typing import Any, cast
+from typing import cast
 
 import keyword
 import sys
@@ -153,15 +153,30 @@ def relative_module_path(fqcn: str, dep: str) -> str:
     rel = rel.replace(os.sep, "/")                          
 
     return rel if rel.startswith(".") else f"./{rel}"
+defineRemoteModule = "defineRemoteModule"
+defineActionModule = "defineActionModule"
+defineDispatchModule = "defineDispatchModule"
+defineControllerModule = "defineControllerModule"
+moduleMetaType = "AnsibleModuleMeta"
 
 def emit_codegen_preamble(fqcn: str) -> str:
     return f"""// Auto-generated from: {fqcn}
 // DO NOT EDIT — regenerate with codegen"""
 
-defineRemoteModule = "defineRemoteModule"
-defineActionModule = "defineActionModule"
-defineDispatchModule = "defineDispatchModule"
-defineControllerModule = "defineControllerModule"
+def emit_module_meta(fqcn: str, meta: dict) -> str:
+    return f"""const fqcn: string = "{fqcn}";
+const meta: {moduleMetaType} = {{ fqcn, ...{json.dumps(meta)} }} as const;
+"""
+
+def emit_remote_module_spec(module_fqn: str, zipdata: bytes, deps: list[Path]) -> str:
+    return f"""
+const moduleFqn: string = "{module_fqn}";
+const dependencies: string[] = [{",".join([f'"{d.relative_to(SOURCES_DIR)}"' for d in deps])}];
+const zipdata: string = "{zipdata.decode("utf-8")}";
+const spec: RemoteModuleSpec = {{ moduleFqn, zipdata, dependencies }} as const;
+"""
+
+
 
 def emit_action_module(
     fqcn: str,
@@ -181,21 +196,17 @@ def emit_action_module(
     tdefs, targs, treturn = emit_types(fqcn, doc, returndocs)
 
     return f'''{emit_codegen_preamble(fqcn)}
-import {{ {defineRemoteModule}, {defineActionModule}, {impl} }} from "@sensible-ts/core";
+import {{ {defineRemoteModule}, {defineActionModule}, {impl}, type {moduleMetaType}, type RemoteModuleSpec }} from "@sensible-ts/core";
 
-const fqcn = "{fqcn}";
-const moduleFqn = "{module_fqn}";
-const meta = {json.dumps(meta)} as const;
+{emit_module_meta(fqcn, meta)}
 
-const dependencies = [{",".join([f'"{d.relative_to(SOURCES_DIR)}"' for d in deps])}];
-
-const zipdata = "{zipdata.decode("utf-8")}";
+{emit_remote_module_spec(module_fqn, zipdata, deps)}
 
 {tdefs}
 
-const mod = {defineRemoteModule}<{targs}, {treturn}>(fqcn, moduleFqn, meta, zipdata, dependencies)
+const mod = {defineRemoteModule}<{targs}, {treturn}>(spec, meta)
 
-export const {fn_name} = {defineActionModule}<{targs}, {treturn}>(fqcn, {impl}, mod);
+export const {fn_name} = {defineActionModule}<{targs}, {treturn}>({impl}, meta);
 '''
 
 def emit_controller_module(
@@ -213,14 +224,13 @@ def emit_controller_module(
     tdefs, targs, treturn = emit_types(fqcn, doc, returndocs)
 
     return f'''{emit_codegen_preamble(fqcn)}
-import {{ {defineControllerModule}, {impl} }} from "@sensible-ts/core";
+import {{ {defineControllerModule}, {impl}, type {moduleMetaType} }} from "@sensible-ts/core";
 
-const fqcn = "{fqcn}";
-const meta = {json.dumps(meta)} as const;
+{emit_module_meta(fqcn, meta)}
 
 {tdefs}
 
-export const {fn_name} = {defineControllerModule}<{targs}, {treturn}>(fqcn, {impl});
+export const {fn_name} = {defineControllerModule}<{targs}, {treturn}>({impl}, meta);
 '''
 
 def emit_dispatch_module(
@@ -239,11 +249,9 @@ def emit_dispatch_module(
     fact = override.get("fact")
 
     return f'''{emit_codegen_preamble(fqcn)}
-import {{ {defineDispatchModule}, type DispatchRegistry }} from "@sensible-ts/core";
+import {{ {defineDispatchModule}, type {moduleMetaType}, type DispatchRegistry, type DispatchModuleSpec, type HostFacts }} from "@sensible-ts/core";
 
-const fqcn = "{fqcn}";
-const meta = {json.dumps(meta)} as const;
-const fact = "{fact}"
+{emit_module_meta(fqcn, meta)}
 
 {tdefs}
 
@@ -251,7 +259,10 @@ const paths: Record<string, string> = {json.dumps({k: relative_module_path(fqcn,
 
 const registry: DispatchRegistry<{targs}, {treturn}> = {{ {",".join([f'"{k}": () => import(paths["{k}"]).then(m => m["{k}"])' for k in registry.keys()])} }} as const;
 
-export const {fn_name} = {defineDispatchModule}<{targs}, {treturn}>(fqcn, fact, registry);
+const factName: keyof HostFacts = "{fact}"
+const spec: DispatchModuleSpec<{targs}, {treturn}> = {{ factName, registry }} as const;
+
+export const {fn_name} = {defineDispatchModule}<{targs}, {treturn}>(spec, meta);
 '''
 
 def emit_remote_module(
@@ -268,24 +279,17 @@ def emit_remote_module(
 
     tdefs, targs, treturn = emit_types(fqcn, doc, returndocs)
 
-    define = "defineRemoteModule"
+    return f'''{emit_codegen_preamble(fqcn)}
 
-    return f'''// Auto-generated from: {fqcn}
-// DO NOT EDIT — regenerate with codegen
+import {{ {defineRemoteModule}, type {moduleMetaType}, type RemoteModuleSpec }} from "@sensible-ts/core";
 
-import {{ {define} }} from "@sensible-ts/core";
+{emit_module_meta(fqcn, meta)}
 
-const fqcn = "{fqcn}";
-const moduleFqn = "{module_fqn}";
-const meta = {json.dumps(meta)} as const;
-
-const dependencies = [{",".join([f'"{d.relative_to(SOURCES_DIR)}"' for d in deps])}];
-
-const zipdata = "{zipdata.decode("utf-8")}";
+{emit_remote_module_spec(module_fqn, zipdata, deps)}
 
 {tdefs}
 
-export const {fn_name} = {define}<{targs}, {treturn}>(fqcn, moduleFqn, meta, zipdata, dependencies);
+export const {fn_name} = {defineRemoteModule}<{targs}, {treturn}>(spec, meta);
 '''
 
 
@@ -293,16 +297,21 @@ def extract_zipdata(data: bytes) -> tuple[bytes, str, list[Path]]:
     src = data.decode("utf-8")
     tree = ast.parse(src)
 
-    zipdata = next(
-        (cast(Any, node.value).value
+    call = next(
+        (node
             for node in ast.walk(tree)
-            if isinstance(node, ast.Assign)
-            for t in node.targets
-            if isinstance(t, ast.Name) and t.id == "ZIPDATA"),
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name) and node.func.id == "_ansiballz_main"),
         None
     )
-    if zipdata is None:
-        raise Exception(f"Could not find ZIPDATA in wrapper")
+    if call is None:
+        raise Exception(f"Could not find _ansiballz_main entrypoint in wrapper")
+    kwargs = {kw.arg: kw.value for kw in call.keywords}
+
+    zip_node = kwargs.get("zip_data")
+    if not isinstance(zip_node, ast.Constant):
+        raise Exception(f"Could not find zip_data in wrapper")
+    zipdata = cast(str, zip_node.value)
 
     if isinstance(zipdata, str):
         zipdata = zipdata.encode("ascii")
@@ -319,17 +328,10 @@ def extract_zipdata(data: bytes) -> tuple[bytes, str, list[Path]]:
         dest.write_bytes(zf.read(name))
         deps.append(dest)
 
-    module_fqn = next(
-        ( cast(Any, kw.value).value
-            for node in ast.walk(tree)
-            if isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Attribute) and node.func.attr == "run_module"
-            for kw in node.keywords
-            if kw.arg == "mod_name" ), 
-        None
-    )
-    if module_fqn is None:
-        raise Exception(f"Could not find run_module entrypoint in wrapper")
+    fqn_node = kwargs.get("module_fqn")
+    if not isinstance(fqn_node, ast.Constant):
+        raise Exception(f"Could not find module_fqn in wrapper")
+    module_fqn = cast(str, fqn_node.value)
 
     return zipdata, module_fqn, deps
 
@@ -365,13 +367,14 @@ def generate_module(fqcn: str, collection: str, modules_dir: Path) -> Path | Non
     }
 
     templar = Templar(loader=DataLoader())
-    data, style, _ = modify_module(
-        fqcn,
-        path,
-        {}, # sentinel args; closure is import-based, values irrelevant
-        templar,
-        task_vars={"ansible_python_interpreter": "/usr/bin/python3"},  
+    built = modify_module(
+        module_name=fqcn,
+        module_path=path,
+        module_args={}, # sentinel args; closure is import-based, values irrelevant
+        templar=templar,
+        task_vars={"ansible_python_interpreter": "/usr/bin/python3"},
     )
+    data, style = built.b_module_data, built.module_style
 
     if fqcn in ACTIONS and style == "new":
         zipdata, module_fqn, deps = extract_zipdata(data)
@@ -394,7 +397,7 @@ def generate_module(fqcn: str, collection: str, modules_dir: Path) -> Path | Non
 
 
 def generate_collection(collection: str):
-    module_names = list_plugins("module", collection).keys()
+    module_names = list_plugins("module", [collection]).keys()
     if not module_names:
         print(f"No modules found for collection: {collection}", file=sys.stderr)
         sys.exit(1)

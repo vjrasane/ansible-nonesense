@@ -1,4 +1,5 @@
 import {
+  AnsibleModuleMeta,
   getModuleFn,
   Module,
   ModuleError,
@@ -18,6 +19,11 @@ type DispatchFn<TArgs extends DispatchArgs, TReturn> = ModuleFn<
   TReturn
 >;
 
+export interface DispatchModuleSpec<TArgs extends DispatchArgs, TReturn> {
+  factName: keyof HostFacts;
+  registry: DispatchRegistry<TArgs, TReturn>;
+}
+
 export type DispatchRegistry<TArgs extends DispatchArgs, TReturn> = Record<
   string,
   () => Promise<DispatchFn<TArgs, TReturn>>
@@ -28,13 +34,16 @@ export class DispatchModule<
   TReturn,
 > implements Module<TArgs, TReturn> {
   constructor(
-    private readonly fqcn: string,
-    private readonly factName: keyof HostFacts,
-    private readonly registry: DispatchRegistry<TArgs, TReturn>,
+    private readonly spec: DispatchModuleSpec<TArgs, TReturn>,
+    public readonly meta: AnsibleModuleMeta,
   ) {}
 
+  get displayName(): string {
+    return this.meta.fqcn;
+  }
+
   private get factValue(): Promise<string> {
-    return currentHost().facts.then((f) => f[this.factName]);
+    return currentHost().facts.then((f) => f[this.spec.factName]);
   }
 
   async exec(
@@ -43,10 +52,10 @@ export class DispatchModule<
     opts?: ModuleExecOpts,
   ): Promise<ModuleResult<TReturn>> {
     const registryKey = args.use ?? (await this.factValue);
-    const importer = this.registry[registryKey];
+    const importer = this.spec.registry[registryKey];
     if (!importer)
       throw new ModuleError(
-        this.fqcn,
+        this.meta.fqcn,
         `No module registered for ${registryKey}`,
       );
 
@@ -55,7 +64,7 @@ export class DispatchModule<
       return mod(args, opts);
     } catch (err) {
       throw new ModuleError(
-        this.fqcn,
+        this.meta.fqcn,
         `Failed to import module for ${registryKey}: ${err}`,
       );
     }
@@ -63,10 +72,9 @@ export class DispatchModule<
 }
 
 export function defineDispatchModule<TArgs extends DispatchArgs, TReturn>(
-  fqcn: string,
-  factName: keyof HostFacts,
-  registry: DispatchRegistry<TArgs, TReturn>,
+  spec: DispatchModuleSpec<TArgs, TReturn>,
+  meta: AnsibleModuleMeta,
 ): ModuleFn<TArgs, TReturn> {
-  const mod = new DispatchModule<TArgs, TReturn>(fqcn, factName, registry);
-  return getModuleFn(fqcn, mod);
+  const mod = new DispatchModule<TArgs, TReturn>(spec, meta);
+  return getModuleFn(mod);
 }
