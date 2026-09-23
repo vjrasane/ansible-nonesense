@@ -9,12 +9,12 @@ interface Span {
   parentId?: string;
 }
 
-interface SpanStartEvent extends Span {
+export interface SpanStartEvent extends Span {
   phase: "start";
   at: number;
 }
 
-interface SpanEndEvent extends Span {
+export interface SpanEndEvent extends Span {
   phase: "end";
   at: number;
   status: SpanStatus;

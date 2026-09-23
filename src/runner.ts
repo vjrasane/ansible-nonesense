@@ -6,14 +6,28 @@ import {
   consoleLogger,
   EventHandler,
   Logger,
-  logReporter,
+  LogLevel,
+  LogReporter,
+  withLevel,
 } from "src/reporter.ts";
 
+interface RunnerOpts extends ModuleExecOpts {
+  logLevel: LogLevel;
+}
+
 export class Runner {
+  private reporter: LogReporter = new LogReporter(
+    withLevel(consoleLogger, "info"),
+  );
+
   constructor(
-    private handler: EventHandler = logReporter(consoleLogger),
+    private handler: EventHandler = this.defaultHandler,
     private opts: ModuleExecOpts = {},
   ) {}
+
+  private defaultHandler = (e: SpanEvent) => {
+    this.reporter.report(e);
+  };
 
   run<T>(fn: () => Promise<T>): Promise<T> {
     return withOptions(this.opts, fn);
@@ -40,7 +54,7 @@ export class Runner {
   }
 
   setLogger(logger: Logger) {
-    this.setHandler(logReporter(logger));
+    this.reporter = new LogReporter(logger);
   }
 }
 
