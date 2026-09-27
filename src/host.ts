@@ -41,7 +41,7 @@ export class Host implements HostRef {
     this.pythonInterpreter = null;
   }
 
-  private get runner(): Runner {
+  get runner(): Runner {
     return this.explicitRunner ?? defaultRunner;
   }
 

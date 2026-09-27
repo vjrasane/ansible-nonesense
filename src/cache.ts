@@ -1,0 +1,238 @@
+import { createHash, randomBytes } from "node:crypto";
+import { createWriteStream, existsSync, mkdirSync } from "node:fs";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import path from "node:path";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
+import { zipSync } from "fflate";
+import * as tar from "tar";
+import { cacheDir, toolName } from "src/config.ts";
+import { FatalError } from "src/errors.ts";
+import { withRetry } from "src/utils.ts";
+
+export interface Artifact {
+  id: string; // "ansible-core@2.17.14" | "community.general@9.4.0"
+  kind: "ansible-core" | "collection";
+  url: string;
+  sha256: string;
+  format: "tar.gz" | "zip";
+  root: string; // path prefix inside the archive to strip; "" for flat tarballs
+}
+
+export interface FileRef {
+  artifact: string; // Artifact.id
+  path: string;
+}
+
+export interface PayloadSpec {
+  fqcn: string;
+  moduleFqn: string; // dotted runpy target, e.g. "ansible_collections.community.general.plugins.modules.apk"
+  artifacts: Artifact[];
+  files: FileRef[]; // closure (includes the module file), each relative to its artifact's root
+}
+
+export class ArtifactError extends FatalError {}
+
+interface CacheOpts {
+  mirror?: string;
+  offline?: boolean;
+}
+
+export class Cache {
+  private readonly artifacts: Map<string, Promise<string>> = new Map();
+
+  constructor(
+    private readonly root = cacheDir,
+    private readonly opts: CacheOpts = {},
+  ) {}
+
+  private ensureDir(dir: string): string {
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+    return dir;
+  }
+
+  private get payloadsDir(): string {
+    return this.ensureDir(path.join(this.root, "payloads"));
+  }
+
+  private get downloadsDir(): string {
+    return this.ensureDir(path.join(this.root, "downloads"));
+  }
+
+  private get artifactsDir(): string {
+    return this.ensureDir(path.join(this.root, "artifacts"));
+  }
+
+  private getPayloadZipfilePath(spec: PayloadSpec): string {
+    return path.join(
+      this.payloadsDir,
+      artifactSetHash(spec.artifacts),
+      `${spec.fqcn}.zip`,
+    );
+  }
+
+  /** `<root>/artifacts/<name>/<version>-<sha256[:12]>` — keyed by name, not kind. */
+  private getArtifactDir(a: Artifact): string {
+    const [name, version] = splitId(a.id);
+    return path.join(
+      this.artifactsDir,
+      name,
+      `${version}-${a.sha256.slice(0, 12)}`,
+    );
+  }
+
+  async ensureArtifact(a: Artifact): Promise<string> {
+    let artifact = this.artifacts.get(a.id);
+    if (artifact) return artifact;
+    artifact = this.fetchArtifact(a);
+    this.artifacts.set(a.id, artifact);
+    return artifact;
+  }
+
+  private async fetchArtifact(a: Artifact): Promise<string> {
+    const dir = this.getArtifactDir(a);
+    if (existsSync(dir)) return dir;
+    if (this.opts.offline)
+      throw new ArtifactError(
+        `offline: ${a.id} not in cache. Populate it with \`${toolName} prefetch\`.`,
+      );
+    await this.fetch(a, dir);
+    return dir;
+  }
+
+  async readFile(a: Artifact, relPath: string): Promise<Buffer> {
+    const dir = await this.ensureArtifact(a);
+    return readFile(path.join(dir, relPath));
+  }
+
+  async buildPayload(spec: PayloadSpec): Promise<Uint8Array> {
+    const dest = this.getPayloadZipfilePath(spec);
+    if (existsSync(dest)) return readFile(dest);
+
+    await Promise.all(spec.artifacts.map((a) => this.ensureArtifact(a)));
+
+    const byId = new Map(spec.artifacts.map((a) => [a.id, a]));
+    const entries: Record<string, Uint8Array> = {};
+    for (const ref of spec.files) {
+      const a = byId.get(ref.artifact);
+      if (!a)
+        throw new ArtifactError(
+          `payload ${spec.fqcn} references unknown artifact ${ref.artifact}`,
+        );
+      entries[canonicalName(a, ref.path)] = new Uint8Array(
+        await this.readFile(a, ref.path),
+      );
+    }
+    const zip = zipSync(entries, { level: 6 });
+
+    await mkdir(path.dirname(dest), { recursive: true });
+    const tmp = `${dest}.tmp.${randomBytes(6).toString("hex")}`;
+    await writeFile(tmp, zip);
+    await rename(tmp, dest);
+    return zip;
+  }
+
+  private async fetch(a: Artifact, finalDir: string): Promise<void> {
+    const part = path.join(
+      this.downloadsDir,
+      `${sanitize(a.id)}.${randomBytes(6).toString("hex")}.part`,
+    );
+
+    const url = this.resolveUrl(a);
+
+    let actual: string;
+    try {
+      actual = await withRetry(() => download(url, part), {
+        attempts: 3,
+      });
+    } catch (e) {
+      await rm(part, { recursive: true, force: true });
+      throw new ArtifactError(
+        `download from ${url} failed for ${a.id}: ${String(e)}`,
+      );
+    }
+
+    if (actual !== a.sha256) {
+      await rm(part, { force: true });
+      throw new ArtifactError(
+        `sha256 mismatch for ${a.id}\n  expected ${a.sha256}\n  actual   ${actual}\n  url      ${url}`,
+      );
+    }
+
+    const tmp = `${finalDir}.tmp.${randomBytes(6).toString("hex")}`;
+    await mkdir(tmp, { recursive: true });
+    try {
+      await extract(part, tmp, a);
+      await mkdir(path.dirname(finalDir), { recursive: true });
+      await rename(tmp, finalDir);
+    } catch (e) {
+      await rm(tmp, { recursive: true, force: true });
+      if (existsSync(finalDir)) {
+        return;
+      }
+      throw e;
+    } finally {
+      await rm(part, { force: true });
+    }
+  }
+
+  private resolveUrl(a: Artifact): string {
+    const { mirror } = this.opts;
+    if (!mirror) return a.url;
+    const base = mirror.endsWith("/") ? mirror : `${mirror}/`;
+    return new URL(new URL(a.url).pathname.replace(/^\//, ""), base).toString();
+  }
+}
+
+async function download(url: string, dest: string): Promise<string> {
+  const res = await fetch(url);
+  if (!res.ok || !res.body)
+    throw new ArtifactError(`download failed (${res.status}) for ${url}`);
+  const hash = createHash("sha256");
+  const body = Readable.fromWeb(res.body as any);
+  body.on("data", (chunk) => hash.update(chunk));
+  await pipeline(body, createWriteStream(dest));
+  return hash.digest("hex");
+}
+
+async function extract(file: string, cwd: string, a: Artifact): Promise<void> {
+  if (a.format !== "tar.gz")
+    throw new ArtifactError(`unsupported format "${a.format}" for ${a.id}`);
+  const root = a.root.replace(/\/+$/, "");
+  await tar.x({
+    file,
+    cwd,
+    strip: root ? root.split("/").length : 0,
+    filter: (p, entry) => {
+      const type = "type" in entry ? entry.type : undefined;
+      if (type === "SymbolicLink" || type === "Link") return false;
+      if (!root) return true;
+      return p === root || p.startsWith(`${root}/`);
+    },
+  });
+}
+
+/** Cache path → canonical zip path. Collections gain their `ansible_collections` prefix. */
+function canonicalName(a: Artifact, relPath: string): string {
+  if (a.kind !== "collection") return relPath; // ansible-core paths are already canonical
+  const [ns, name] = splitId(a.id)[0].split(".");
+  return `ansible_collections/${ns}/${name}/${relPath}`;
+}
+
+function artifactSetHash(artifacts: Artifact[]): string {
+  const ids = artifacts.map((a) => a.id).sort();
+  return createHash("sha256").update(ids.join("\n")).digest("hex").slice(0, 16);
+}
+
+function splitId(id: string): [name: string, version: string] {
+  const at = id.lastIndexOf("@");
+  if (at <= 0) throw new ArtifactError(`malformed artifact id: ${id}`);
+  return [id.slice(0, at), id.slice(at + 1)];
+}
+
+const sanitize = (id: string) => id.replace(/[^a-zA-Z0-9._-]/g, "_");
+
+export let CACHE = new Cache();
+export function setCache(cache: Cache) {
+  CACHE = cache;
+}

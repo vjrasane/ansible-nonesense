@@ -1,4 +1,5 @@
 import { currentContext } from "src/context.ts";
+import { CACHE, Cache } from "src/cache.ts";
 import {
   AnsibleModuleMeta,
   getModuleFn,
@@ -12,6 +13,7 @@ import {
   RawResult,
 } from "src/module/module.ts";
 import { execPythonOnHost } from "src/host.ts";
+import { Artifact, FileRef } from "src/cache.ts";
 
 const ANSIBLE_VERSION = "2.17.x"; // the generated version const
 
@@ -23,15 +25,18 @@ const SKIPPED_RESULT: ModuleSkippedResult<unknown> = {
 } as const;
 
 export interface RemoteModuleSpec {
+  fqcn: string;
   moduleFqn: string;
-  zipdata: string;
-  deps: string[];
+  files: FileRef[];
+  artifacts: Artifact[];
 }
 
 export class RemoteModule<
   TArgs extends Record<string, any>,
   TReturn,
 > implements Module<TArgs, TReturn> {
+  private _payload: Promise<Uint8Array> | null = null;
+
   constructor(
     private readonly spec: RemoteModuleSpec,
     public readonly meta: AnsibleModuleMeta,
@@ -39,6 +44,11 @@ export class RemoteModule<
 
   get displayName(): string {
     return this.meta.fqcn;
+  }
+
+  get payload(): Promise<Uint8Array> {
+    if (this._payload == null) this._payload = CACHE.buildPayload(this.spec);
+    return this._payload;
   }
 
   async exec(
@@ -80,13 +90,14 @@ export class RemoteModule<
     };
     const paramsJson = JSON.stringify(params);
     const paramsBase64 = Buffer.from(paramsJson, "utf-8").toString("base64");
+    const zipdata = await this.payload;
     const wrapper = [
       "import base64, os, runpy, sys, tempfile, atexit, shutil",
       'tmp = tempfile.mkdtemp(prefix="ansiballz_")',
       "atexit.register(shutil.rmtree, tmp, ignore_errors=True)",
       'zp = os.path.join(tmp, "payload.zip")',
       'with open(zp, "wb") as f:',
-      `    f.write(base64.b64decode("${this.spec.zipdata}"))`,
+      `    f.write(base64.b64decode("${zipdata}"))`,
       "sys.path.insert(0, zp)",
       "from ansible.module_utils import basic",
       `basic._ANSIBLE_ARGS = base64.b64decode("${paramsBase64}")`,

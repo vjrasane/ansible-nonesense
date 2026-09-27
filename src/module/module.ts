@@ -1,4 +1,5 @@
-import { withOptions, withSpan } from "src/context.ts";
+import { currentRunner, withOptions, withSpan } from "src/context.ts";
+import { isFatal } from "src/errors.ts";
 
 export type ModuleStatus = "ok" | "changed" | "failed" | "skipped";
 
@@ -94,9 +95,14 @@ export function getModuleFn<TArgs extends Record<string, any>, TReturn>(
     const name = named ? a : undefined;
     const args = (named ? b : a) as TArgs | undefined;
     const opts = (named ? c : b) as ModuleExecOpts | undefined;
-    return withSpan("step", name ?? mod.displayName, () =>
-      mod.exec(name, (args ?? {}) as TArgs, opts),
-    );
+    return withSpan("step", name ?? mod.displayName, async () => {
+      try {
+        return await mod.exec(name, (args ?? {}) as TArgs, opts);
+      } catch (e) {
+        if (isFatal(e)) currentRunner().setFatal(e);
+        throw e;
+      }
+    });
   }
   return fn;
 }

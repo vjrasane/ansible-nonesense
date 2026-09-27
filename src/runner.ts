@@ -6,23 +6,21 @@ import {
   consoleLogger,
   EventHandler,
   Logger,
-  LogLevel,
   LogReporter,
   withLevel,
 } from "src/reporter.ts";
-
-interface RunnerOpts extends ModuleExecOpts {
-  logLevel: LogLevel;
-}
+import { FatalError } from "./errors.ts";
 
 export class Runner {
+  private fatal: FatalError | null = null;
+
   private reporter: LogReporter = new LogReporter(
     withLevel(consoleLogger, "info"),
   );
 
   constructor(
-    private handler: EventHandler = this.defaultHandler,
     private opts: ModuleExecOpts = {},
+    private handler: EventHandler = this.defaultHandler,
   ) {}
 
   private defaultHandler = (e: SpanEvent) => {
@@ -30,7 +28,15 @@ export class Runner {
   };
 
   run<T>(fn: () => Promise<T>): Promise<T> {
-    return withOptions(this.opts, fn);
+    return withOptions(this.opts, async () => {
+      try {
+        const r = await fn();
+        if (this.fatal) throw this.fatal;
+        return r;
+      } catch (e) {
+        throw this.fatal ?? e;
+      }
+    });
   }
 
   host(name: string, cfg?: HostConfig): HostRef {
@@ -55,6 +61,10 @@ export class Runner {
 
   setLogger(logger: Logger) {
     this.reporter = new LogReporter(logger);
+  }
+
+  setFatal(err: FatalError) {
+    this.fatal = err;
   }
 }
 
