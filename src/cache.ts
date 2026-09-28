@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import { createWriteStream, existsSync, mkdirSync } from "node:fs";
+import { createWriteStream, existsSync } from "node:fs";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { Readable } from "node:stream";
@@ -8,16 +8,19 @@ import { zipSync } from "fflate";
 import * as tar from "tar";
 import { cacheDir, toolName } from "src/config.ts";
 import { FatalError } from "src/errors.ts";
+import { toSpanError, type SpanEvent, type SpanKind } from "src/span.ts";
 import { withRetry } from "src/utils.ts";
 
 export interface Artifact {
   id: string; // "ansible-core@2.17.14" | "community.general@9.4.0"
-  kind: "ansible-core" | "collection";
   url: string;
   sha256: string;
   format: "tar.gz" | "zip";
   root: string; // path prefix inside the archive to strip; "" for flat tarballs
 }
+
+/** ansible-core is the sole non-collection artifact; everything else is a Galaxy collection. */
+const isCore = (a: Artifact) => splitId(a.id)[0] === "ansible-core";
 
 export interface FileRef {
   artifact: string; // Artifact.id
@@ -44,23 +47,55 @@ export class Cache {
   constructor(
     private readonly root = cacheDir,
     private readonly opts: CacheOpts = {},
+    private readonly onEvent: (e: SpanEvent) => void = () => {},
   ) {}
 
-  private ensureDir(dir: string): string {
-    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-    return dir;
+  /** Bracket a cache operation with session-level start/end spans (no host, no parent). */
+  private async span<T>(
+    kind: SpanKind,
+    name: string,
+    fn: () => Promise<readonly [T, { bytes?: number }]>,
+  ): Promise<T> {
+    const start = Date.now();
+    this.onEvent({ kind, name, host: "", phase: "start", at: start });
+    try {
+      const [value, extra] = await fn();
+      this.onEvent({
+        kind,
+        name,
+        host: "",
+        phase: "end",
+        at: Date.now(),
+        status: "ok",
+        ms: Date.now() - start,
+        ...extra,
+      });
+      return value;
+    } catch (e) {
+      this.onEvent({
+        kind,
+        name,
+        host: "",
+        phase: "end",
+        at: Date.now(),
+        status: "failed",
+        ms: Date.now() - start,
+        error: toSpanError(e),
+      });
+      throw e;
+    }
   }
 
-  private get payloadsDir(): string {
-    return this.ensureDir(path.join(this.root, "payloads"));
+  get payloadsDir(): string {
+    return path.join(this.root, "payloads");
   }
 
   private get downloadsDir(): string {
-    return this.ensureDir(path.join(this.root, "downloads"));
+    return path.join(this.root, "downloads");
   }
 
-  private get artifactsDir(): string {
-    return this.ensureDir(path.join(this.root, "artifacts"));
+  get artifactsDir(): string {
+    return path.join(this.root, "artifacts");
   }
 
   private getPayloadZipfilePath(spec: PayloadSpec): string {
@@ -72,7 +107,7 @@ export class Cache {
   }
 
   /** `<root>/artifacts/<name>/<version>-<sha256[:12]>` — keyed by name, not kind. */
-  private getArtifactDir(a: Artifact): string {
+  getArtifactDir(a: Artifact): string {
     const [name, version] = splitId(a.id);
     return path.join(
       this.artifactsDir,
@@ -109,71 +144,72 @@ export class Cache {
     const dest = this.getPayloadZipfilePath(spec);
     if (existsSync(dest)) return readFile(dest);
 
-    await Promise.all(spec.artifacts.map((a) => this.ensureArtifact(a)));
+    return this.span("payload", spec.fqcn, async () => {
+      await Promise.all(spec.artifacts.map((a) => this.ensureArtifact(a)));
 
-    const byId = new Map(spec.artifacts.map((a) => [a.id, a]));
-    const entries: Record<string, Uint8Array> = {};
-    for (const ref of spec.files) {
-      const a = byId.get(ref.artifact);
-      if (!a)
-        throw new ArtifactError(
-          `payload ${spec.fqcn} references unknown artifact ${ref.artifact}`,
+      const byId = new Map(spec.artifacts.map((a) => [a.id, a]));
+      const entries: Record<string, Uint8Array> = {};
+      for (const ref of spec.files) {
+        const a = byId.get(ref.artifact);
+        if (!a)
+          throw new ArtifactError(
+            `payload ${spec.fqcn} references unknown artifact ${ref.artifact}`,
+          );
+        entries[canonicalName(a, ref.path)] = new Uint8Array(
+          await this.readFile(a, ref.path),
         );
-      entries[canonicalName(a, ref.path)] = new Uint8Array(
-        await this.readFile(a, ref.path),
-      );
-    }
-    const zip = zipSync(entries, { level: 6 });
+      }
+      const zip = zipSync(entries, { level: 6 });
 
-    await mkdir(path.dirname(dest), { recursive: true });
-    const tmp = `${dest}.tmp.${randomBytes(6).toString("hex")}`;
-    await writeFile(tmp, zip);
-    await rename(tmp, dest);
-    return zip;
+      await mkdir(path.dirname(dest), { recursive: true });
+      const tmp = `${dest}.tmp.${randomBytes(6).toString("hex")}`;
+      await writeFile(tmp, zip);
+      await rename(tmp, dest);
+      return [zip, {}] as const;
+    });
   }
 
   private async fetch(a: Artifact, finalDir: string): Promise<void> {
-    const part = path.join(
-      this.downloadsDir,
-      `${sanitize(a.id)}.${randomBytes(6).toString("hex")}.part`,
-    );
-
-    const url = this.resolveUrl(a);
-
-    let actual: string;
-    try {
-      actual = await withRetry(() => download(url, part), {
-        attempts: 3,
-      });
-    } catch (e) {
-      await rm(part, { recursive: true, force: true });
-      throw new ArtifactError(
-        `download from ${url} failed for ${a.id}: ${String(e)}`,
+    await this.span("fetch", a.id, async () => {
+      await mkdir(this.downloadsDir, { recursive: true });
+      const part = path.join(
+        this.downloadsDir,
+        `${sanitize(a.id)}.${randomBytes(6).toString("hex")}.part`,
       );
-    }
 
-    if (actual !== a.sha256) {
-      await rm(part, { force: true });
-      throw new ArtifactError(
-        `sha256 mismatch for ${a.id}\n  expected ${a.sha256}\n  actual   ${actual}\n  url      ${url}`,
-      );
-    }
+      const url = this.resolveUrl(a);
 
-    const tmp = `${finalDir}.tmp.${randomBytes(6).toString("hex")}`;
-    await mkdir(tmp, { recursive: true });
-    try {
-      await extract(part, tmp, a);
-      await mkdir(path.dirname(finalDir), { recursive: true });
-      await rename(tmp, finalDir);
-    } catch (e) {
-      await rm(tmp, { recursive: true, force: true });
-      if (existsSync(finalDir)) {
-        return;
+      let dl: { sha256: string; bytes: number };
+      try {
+        dl = await withRetry(() => download(url, part), { attempts: 3 });
+      } catch (e) {
+        await rm(part, { recursive: true, force: true });
+        throw new ArtifactError(
+          `download from ${url} failed for ${a.id}: ${String(e)}`,
+        );
       }
-      throw e;
-    } finally {
-      await rm(part, { force: true });
-    }
+
+      if (dl.sha256 !== a.sha256) {
+        await rm(part, { force: true });
+        throw new ArtifactError(
+          `sha256 mismatch for ${a.id}\n  expected ${a.sha256}\n  actual   ${dl.sha256}\n  url      ${url}`,
+        );
+      }
+
+      const tmp = `${finalDir}.tmp.${randomBytes(6).toString("hex")}`;
+      await mkdir(tmp, { recursive: true });
+      try {
+        await extract(part, tmp, a);
+        await mkdir(path.dirname(finalDir), { recursive: true });
+        await rename(tmp, finalDir);
+      } catch (e) {
+        await rm(tmp, { recursive: true, force: true });
+        if (!existsSync(finalDir)) throw e; // real failure, not a lost race
+      } finally {
+        await rm(part, { force: true });
+      }
+      return [undefined, { bytes: dl.bytes }] as const;
+    });
   }
 
   private resolveUrl(a: Artifact): string {
@@ -184,15 +220,27 @@ export class Cache {
   }
 }
 
-async function download(url: string, dest: string): Promise<string> {
+async function download(
+  url: string,
+  dest: string,
+): Promise<{ sha256: string; bytes: number }> {
   const res = await fetch(url);
   if (!res.ok || !res.body)
     throw new ArtifactError(`download failed (${res.status}) for ${url}`);
   const hash = createHash("sha256");
-  const body = Readable.fromWeb(res.body as any);
-  body.on("data", (chunk) => hash.update(chunk));
-  await pipeline(body, createWriteStream(dest));
-  return hash.digest("hex");
+  let bytes = 0;
+  await pipeline(
+    Readable.fromWeb(res.body as any),
+    async function* (source) {
+      for await (const chunk of source) {
+        hash.update(chunk);
+        bytes += chunk.length;
+        yield chunk;
+      }
+    },
+    createWriteStream(dest),
+  );
+  return { sha256: hash.digest("hex"), bytes };
 }
 
 async function extract(file: string, cwd: string, a: Artifact): Promise<void> {
@@ -214,7 +262,7 @@ async function extract(file: string, cwd: string, a: Artifact): Promise<void> {
 
 /** Cache path → canonical zip path. Collections gain their `ansible_collections` prefix. */
 function canonicalName(a: Artifact, relPath: string): string {
-  if (a.kind !== "collection") return relPath; // ansible-core paths are already canonical
+  if (isCore(a)) return relPath; // ansible-core paths are already canonical
   const [ns, name] = splitId(a.id)[0].split(".");
   return `ansible_collections/${ns}/${name}/${relPath}`;
 }
@@ -224,7 +272,7 @@ function artifactSetHash(artifacts: Artifact[]): string {
   return createHash("sha256").update(ids.join("\n")).digest("hex").slice(0, 16);
 }
 
-function splitId(id: string): [name: string, version: string] {
+export function splitId(id: string): [name: string, version: string] {
   const at = id.lastIndexOf("@");
   if (at <= 0) throw new ArtifactError(`malformed artifact id: ${id}`);
   return [id.slice(0, at), id.slice(at + 1)];

@@ -12,6 +12,7 @@
   "scripts": {
     "dev": "tsx",
     "build": "tsc -p tsconfig.build.json",
+    "codegen": "tsx scripts/codegen.ts",
     "test": "vitest run"
   },
   "devDependencies": {

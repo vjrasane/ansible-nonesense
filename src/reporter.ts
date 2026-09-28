@@ -15,7 +15,34 @@ export class LogReporter {
     switch (event.kind) {
       case "step":
         return this.reportStep(event);
+      case "fetch":
+        return this.reportCache(event, "info");
+      case "payload":
+        return this.reportCache(event, "debug");
     }
+  };
+
+  private reportCache = (e: SpanEvent, level: LogLevel) => {
+    if (e.phase === "start")
+      return this.logger.log(level, `${e.name} ...`, {
+        kind: e.kind,
+        name: e.name,
+      });
+    // A provisioning failure must surface regardless of the kind's base level.
+    const failed = e.status === "failed";
+    const size = e.bytes ? ` ${formatBytes(e.bytes)}` : "";
+    return this.logger.log(
+      failed ? "error" : level,
+      `${e.name} ${e.status} (${e.ms}ms)${size}`,
+      {
+        kind: e.kind,
+        name: e.name,
+        status: e.status,
+        ms: e.ms,
+        ...(e.bytes && { bytes: e.bytes }),
+        ...(e.error && { error: e.error }),
+      },
+    );
   };
 
   private reportStep = (e: SpanEvent) => {
@@ -56,6 +83,16 @@ export class LogReporter {
         return this.logger.log("error", message, fields);
     }
   };
+}
+
+function formatBytes(n: number): string {
+  const units = ["B", "KiB", "MiB", "GiB"];
+  let i = 0;
+  while (n >= 1024 && i < units.length - 1) {
+    n /= 1024;
+    i++;
+  }
+  return `${i === 0 ? n : n.toFixed(1)}${units[i]}`;
 }
 
 export const consoleLogger: Logger = {

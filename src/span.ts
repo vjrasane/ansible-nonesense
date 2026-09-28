@@ -22,11 +22,12 @@ export interface SpanEndEvent extends Span {
   changed?: boolean;
   error?: SpanError;
   ms: number;
+  bytes?: number; // fetch: artifact size, for throughput reporting
 }
 
 export type SpanEvent = SpanStartEvent | SpanEndEvent;
 
-export type SpanKind = "host" | "step" | "connection";
+export type SpanKind = "host" | "step" | "connection" | "fetch" | "payload";
 export type SpanStatus =
   | "ok"
   | "changed"
