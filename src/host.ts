@@ -108,8 +108,6 @@ export class Host implements HostRef {
   }
 }
 
-export const localhost = new Host("localhost", new LocalConnection());
-
 export async function execPythonOnHost(
   host: Host,
   script: string,
@@ -134,8 +132,13 @@ interface LocalHostConfig extends HostOpts {}
 
 export type HostConfig = RemoteHostConfig | LocalHostConfig;
 
-export function host(name: string, cfg?: HostConfig, runner?: Runner): HostRef {
-  if (!cfg || !("host" in cfg))
-    return new Host(name, new LocalConnection(), cfg, runner);
-  return new Host(name, new SSHConnection(cfg), cfg, runner);
+export function host(
+  name: string,
+  cfg: RemoteHostConfig = {},
+  runner?: Runner,
+): HostRef {
+  const sshCfg = { ...cfg, host: cfg.host ?? name };
+  return new Host(name, new SSHConnection(sshCfg), sshCfg, runner);
 }
+
+export const localhost = new Host("localhost", new LocalConnection());

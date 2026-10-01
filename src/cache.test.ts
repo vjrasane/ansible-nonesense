@@ -62,17 +62,20 @@ describe("Cache.buildPayload", () => {
   const spec: PayloadSpec = {
     fqcn: "community.general.apk",
     moduleFqn: "ansible_collections.community.general.plugins.modules.apk",
-    artifacts: [core, collection],
-    files: [
-      { artifact: core.id, path: "ansible/module_utils/basic.py" },
-      { artifact: collection.id, path: "plugins/module_utils/version.py" },
-      { artifact: collection.id, path: "plugins/modules/apk.py" },
+    sources: [
+      { artifact: core, files: ["ansible/module_utils/basic.py"] },
+      {
+        artifact: collection,
+        files: ["plugins/module_utils/version.py", "plugins/modules/apk.py"],
+      },
     ],
+    scaffold: [],
+    markers: [],
   };
 
   test("zips closure files at their canonical FQN paths", async () => {
     const cache = await seed();
-    const entries = unzipSync(await cache.buildPayload(spec));
+    const entries = unzipSync(Buffer.from(await cache.buildPayload(spec), "base64"));
     expect(Object.keys(entries).sort()).toEqual([
       "ansible/module_utils/basic.py",
       "ansible_collections/community/general/plugins/module_utils/version.py",

@@ -1,5 +1,5 @@
 import { currentContext } from "src/context.ts";
-import { CACHE, Cache } from "src/cache.ts";
+import { CACHE } from "src/cache.ts";
 import {
   AnsibleModuleMeta,
   getModuleFn,
@@ -36,7 +36,7 @@ export class RemoteModule<
   TArgs extends Record<string, any>,
   TReturn,
 > implements Module<TArgs, TReturn> {
-  private _payload: Promise<Uint8Array> | null = null;
+  private _payload: Promise<string> | null = null;
 
   constructor(
     private readonly spec: RemoteModuleSpec,
@@ -47,13 +47,13 @@ export class RemoteModule<
     return this.meta.fqcn;
   }
 
-  get payload(): Promise<Uint8Array> {
+  get payload(): Promise<string> {
     if (this._payload == null) this._payload = CACHE.buildPayload(this.spec);
     return this._payload;
   }
 
   async exec(
-    name: string | undefined,
+    _name: string | undefined,
     args: TArgs,
     moduleOpts: ModuleExecOpts = {},
   ): Promise<ModuleResult<TReturn>> {
@@ -93,16 +93,21 @@ export class RemoteModule<
     const paramsBase64 = Buffer.from(paramsJson, "utf-8").toString("base64");
     const zipdata = await this.payload;
     const wrapper = [
-      "import base64, os, runpy, sys, tempfile, atexit, shutil",
+      "import base64, os, sys, tempfile, atexit, shutil",
       'tmp = tempfile.mkdtemp(prefix="ansiballz_")',
       "atexit.register(shutil.rmtree, tmp, ignore_errors=True)",
       'zp = os.path.join(tmp, "payload.zip")',
       'with open(zp, "wb") as f:',
       `    f.write(base64.b64decode("${zipdata}"))`,
       "sys.path.insert(0, zp)",
-      "from ansible.module_utils import basic",
-      `basic._ANSIBLE_ARGS = base64.b64decode("${paramsBase64}")`,
-      `runpy.run_module("${this.spec.moduleFqn}", run_name="__main__", alter_sys=True)`,
+      "from ansible.module_utils._internal._ansiballz._loader import run_module",
+      "run_module(",
+      `    json_params=base64.b64decode("${paramsBase64}"),`,
+      '    profile="legacy",',
+      `    module_fqn="${this.spec.moduleFqn}",`,
+      "    modlib_path=zp,",
+      "    extensions={},",
+      ")",
     ].join("\n");
     const raw: RawResult<TReturn> = await execPythonOnHost(ctx.host, wrapper);
 

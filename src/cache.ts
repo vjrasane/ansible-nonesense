@@ -146,9 +146,10 @@ export class Cache {
     return readFile(path.join(dir, relPath));
   }
 
-  async buildPayload(spec: PayloadSpec): Promise<Uint8Array> {
+  /** The payload zip, base64-encoded for the bootstrap. Cached (and stored) already-encoded. */
+  async buildPayload(spec: PayloadSpec): Promise<string> {
     const dest = this.getPayloadZipfilePath(spec);
-    if (existsSync(dest)) return readFile(dest);
+    if (existsSync(dest)) return readFile(dest, "utf8");
 
     return this.span("payload", spec.fqcn, async () => {
       await Promise.all(spec.sources.map((s) => this.ensureArtifact(s.artifact)));
@@ -163,12 +164,13 @@ export class Cache {
       const empty = new Uint8Array();
       for (const p of spec.markers) entries[p] = empty;
       const zip = zipSync(entries, { level: 6 });
+      const b64 = Buffer.from(zip).toString("base64");
 
       await mkdir(path.dirname(dest), { recursive: true });
       const tmp = `${dest}.tmp.${randomBytes(6).toString("hex")}`;
-      await writeFile(tmp, zip);
+      await writeFile(tmp, b64);
       await rename(tmp, dest);
-      return [zip, {}] as const;
+      return [b64, { bytes: zip.length }] as const;
     });
   }
 

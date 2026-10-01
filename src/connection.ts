@@ -138,7 +138,7 @@ export class LocalConnection extends AbstractConnection {
 }
 
 export interface SSHConfig {
-  host: string;
+  host?: string;
   user?: string;
   port?: number;
   identityFile?: string;

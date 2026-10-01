@@ -10,7 +10,6 @@ export {
 } from "src/module/remote.ts";
 export {
   dispatchImpl,
-  type DispatchModuleSpec,
   type DispatchRegistry,
 } from "src/module/dispatch.ts";
 export {

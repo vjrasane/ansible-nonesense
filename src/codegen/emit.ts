@@ -212,8 +212,10 @@ function emitSuboptions(
   const lines = ["{"];
   for (const [name, opt] of Object.entries(subs).sort(([a], [b]) =>
     a.localeCompare(b),
-  ))
-    lines.push(`${pad}  ${name}${opt.required ? "" : "?"}: ${tsType(opt)};`);
+  )) {
+    const key = isIdent(name) ? name : `"${name}"`;
+    lines.push(`${pad}  ${key}${opt.required ? "" : "?"}: ${tsType(opt)};`);
+  }
   lines.push(`${pad}}`);
   return lines.join("\n");
 }
@@ -329,7 +331,7 @@ ${preamble(m.fqcn)}
 ${emitMeta(m)}
 ${types}
 ${dispatchDecl}${modDecl}
-export const ${fn} = ${defineActionModule}<${Args}, ${Return}>(${impl}, ${hasMod ? "mod" : "undefined"}, meta);
+export const ${fn} = ${defineActionModule}${dispatch ? code`<${Args}, ${Return}>` : code``}(${impl}, ${hasMod ? "mod" : "undefined"}, meta);
 `;
 }
 

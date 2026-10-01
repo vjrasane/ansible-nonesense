@@ -5,13 +5,25 @@
   "type": "module",
   "exports": {
     ".": {
-      "types": "./dist/module.d.ts",
-      "default": "./dist/module.js"
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./builtin": {
+      "types": "./dist/builtin/index.d.ts",
+      "default": "./dist/builtin/index.js"
+    },
+    "./community-general": {
+      "types": "./dist/community-general/index.d.ts",
+      "default": "./dist/community-general/index.js"
     }
   },
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "dev": "tsx",
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsup",
+    "build:watch": "tsup --watch",
     "codegen": "tsx src/codegen/codegen-builtin.ts && tsx src/codegen/codegen-collection.ts community.general",
     "codegen:builtin": "tsx src/codegen/codegen-builtin.ts",
     "codegen:collection": "tsx src/codegen/codegen-collection.ts",
@@ -19,6 +31,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "tsup": "^8.5.1",
     "tsx": "^4.21.0",
     "typescript": "^5.8.0",
     "vitest": "^3.0.0"
