@@ -1,12 +1,5 @@
-import {
-  AnsibleModuleMeta,
-  getModuleFn,
-  Module,
-  ModuleError,
-  ModuleExecOpts,
-  ModuleFn,
-  ModuleResult,
-} from "src/module/module.ts";
+import { ModuleError, ModuleFn } from "src/module/module.ts";
+import { ActionFn } from "src/module/action.ts";
 import { HostFacts } from "src/host.ts";
 import { currentHost } from "src/context.ts";
 
@@ -14,67 +7,45 @@ interface DispatchArgs {
   use?: string;
 }
 
-type DispatchFn<TArgs extends DispatchArgs, TReturn> = ModuleFn<
-  Omit<TArgs, "use">,
-  TReturn
->;
-
-export interface DispatchModuleSpec<TArgs extends DispatchArgs, TReturn> {
-  factName: keyof HostFacts;
-  registry: DispatchRegistry<TArgs, TReturn>;
-}
-
 export type DispatchRegistry<TArgs extends DispatchArgs, TReturn> = Record<
   string,
-  () => Promise<DispatchFn<TArgs, TReturn>>
+  () => Promise<ModuleFn<TArgs, TReturn>>
 >;
 
-export class DispatchModule<
-  TArgs extends DispatchArgs,
-  TReturn,
-> implements Module<TArgs, TReturn> {
-  constructor(
-    private readonly spec: DispatchModuleSpec<TArgs, TReturn>,
-    public readonly meta: AnsibleModuleMeta,
-  ) {}
-
-  get displayName(): string {
-    return this.meta.fqcn;
-  }
-
-  private get factValue(): Promise<string> {
-    return currentHost().facts.then((f) => f[this.spec.factName]);
-  }
-
-  async exec(
-    name: string | undefined,
-    args: TArgs,
-    opts?: ModuleExecOpts,
-  ): Promise<ModuleResult<TReturn>> {
-    const registryKey = args.use ?? (await this.factValue);
-    const importer = this.spec.registry[registryKey];
-    if (!importer)
-      throw new ModuleError(
-        this.meta.fqcn,
-        `No module registered for ${registryKey}`,
-      );
-
-    try {
-      const mod = await importer();
-      return mod(args, opts);
-    } catch (err) {
-      throw new ModuleError(
-        this.meta.fqcn,
-        `Failed to import module for ${registryKey}: ${err}`,
-      );
-    }
-  }
+/** Pick the backend for the host's fact (or the explicit `use`), if registered. */
+async function resolve<TArgs extends DispatchArgs, TReturn>(
+  factName: keyof HostFacts,
+  registry: DispatchRegistry<TArgs, TReturn>,
+  args: TArgs,
+): Promise<ModuleFn<TArgs, TReturn> | undefined> {
+  const key = args.use ?? (await currentHost().facts)[factName];
+  const importer = registry[key];
+  return importer ? await importer() : undefined;
 }
 
-export function defineDispatchModule<TArgs extends DispatchArgs, TReturn>(
-  spec: DispatchModuleSpec<TArgs, TReturn>,
-  meta: AnsibleModuleMeta,
-): ModuleFn<TArgs, TReturn> {
-  const mod = new DispatchModule<TArgs, TReturn>(spec, meta);
-  return getModuleFn(mod);
+/** `use` selects the backend here; it must not reach the backend module itself. */
+function withoutUse<TArgs extends DispatchArgs>(args: TArgs): TArgs {
+  const rest = { ...args };
+  delete rest.use;
+  return rest;
+}
+
+/**
+ * Dispatch as an action impl: route by fact to a backend; on a miss fall back to
+ * the action's own module (`mod`) — ansible's generic fallback, e.g.
+ * ansible.legacy.service. With no fallback module it fails, like AnsibleActionFail.
+ */
+export function dispatchImpl<TArgs extends DispatchArgs, TReturn>(
+  factName: keyof HostFacts,
+  registry: DispatchRegistry<TArgs, TReturn>,
+): ActionFn<TArgs, TReturn> {
+  return async (args, opts, mod) => {
+    const target = (await resolve(factName, registry, args)) ?? mod;
+    if (!target)
+      throw new ModuleError(
+        String(factName),
+        `no module registered for ${String(factName)}`,
+      );
+    return target(withoutUse(args), opts);
+  };
 }

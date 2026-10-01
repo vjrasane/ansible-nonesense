@@ -13,7 +13,7 @@ import {
   RawResult,
 } from "src/module/module.ts";
 import { execPythonOnHost } from "src/host.ts";
-import { Artifact, FileRef } from "src/cache.ts";
+import { ArtifactFiles, ScaffoldFile } from "src/cache.ts";
 
 const ANSIBLE_VERSION = "2.17.x"; // the generated version const
 
@@ -27,8 +27,9 @@ const SKIPPED_RESULT: ModuleSkippedResult<unknown> = {
 export interface RemoteModuleSpec {
   fqcn: string;
   moduleFqn: string;
-  files: FileRef[];
-  artifacts: Artifact[];
+  sources: ArtifactFiles[];
+  scaffold: ScaffoldFile[];
+  markers: string[];
 }
 
 export class RemoteModule<

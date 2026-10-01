@@ -12,7 +12,9 @@
   "scripts": {
     "dev": "tsx",
     "build": "tsc -p tsconfig.build.json",
-    "codegen": "tsx scripts/codegen.ts",
+    "codegen": "tsx src/codegen/codegen-builtin.ts && tsx src/codegen/codegen-collection.ts community.general",
+    "codegen:builtin": "tsx src/codegen/codegen-builtin.ts",
+    "codegen:collection": "tsx src/codegen/codegen-collection.ts",
     "test": "vitest run"
   },
   "devDependencies": {
@@ -24,6 +26,7 @@
   "dependencies": {
     "env-paths": "^4.0.0",
     "fflate": "^0.8.3",
-    "tar": "^7.5.22"
+    "tar": "^7.5.22",
+    "ts-poet": "^6.12.0"
   }
 }

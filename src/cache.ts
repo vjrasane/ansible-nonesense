@@ -22,16 +22,22 @@ export interface Artifact {
 /** ansible-core is the sole non-collection artifact; everything else is a Galaxy collection. */
 const isCore = (a: Artifact) => splitId(a.id)[0] === "ansible-core";
 
-export interface FileRef {
-  artifact: string; // Artifact.id
-  path: string;
+export interface ArtifactFiles {
+  artifact: Artifact;
+  files: string[]; // closure paths relative to the artifact's root
+}
+
+export interface ScaffoldFile {
+  path: string; // canonical zip path
+  content: string; // AnsiBallZ-rewritten package-root stub
 }
 
 export interface PayloadSpec {
   fqcn: string;
   moduleFqn: string; // dotted runpy target, e.g. "ansible_collections.community.general.plugins.modules.apk"
-  artifacts: Artifact[];
-  files: FileRef[]; // closure (includes the module file), each relative to its artifact's root
+  sources: ArtifactFiles[]; // GPL closure fetched from the cache; the module file is among these
+  scaffold: ScaffoldFile[]; // AnsiBallZ-rewritten stubs, written verbatim
+  markers: string[]; // empty __init__.py package markers
 }
 
 export class ArtifactError extends FatalError {}
@@ -101,7 +107,7 @@ export class Cache {
   private getPayloadZipfilePath(spec: PayloadSpec): string {
     return path.join(
       this.payloadsDir,
-      artifactSetHash(spec.artifacts),
+      artifactSetHash(spec.sources.map((s) => s.artifact)),
       `${spec.fqcn}.zip`,
     );
   }
@@ -145,20 +151,17 @@ export class Cache {
     if (existsSync(dest)) return readFile(dest);
 
     return this.span("payload", spec.fqcn, async () => {
-      await Promise.all(spec.artifacts.map((a) => this.ensureArtifact(a)));
+      await Promise.all(spec.sources.map((s) => this.ensureArtifact(s.artifact)));
 
-      const byId = new Map(spec.artifacts.map((a) => [a.id, a]));
       const entries: Record<string, Uint8Array> = {};
-      for (const ref of spec.files) {
-        const a = byId.get(ref.artifact);
-        if (!a)
-          throw new ArtifactError(
-            `payload ${spec.fqcn} references unknown artifact ${ref.artifact}`,
+      for (const { artifact, files } of spec.sources)
+        for (const file of files)
+          entries[canonicalName(artifact, file)] = new Uint8Array(
+            await this.readFile(artifact, file),
           );
-        entries[canonicalName(a, ref.path)] = new Uint8Array(
-          await this.readFile(a, ref.path),
-        );
-      }
+      for (const { path: p, content } of spec.scaffold) entries[p] = utf8(content);
+      const empty = new Uint8Array();
+      for (const p of spec.markers) entries[p] = empty;
       const zip = zipSync(entries, { level: 6 });
 
       await mkdir(path.dirname(dest), { recursive: true });
@@ -259,6 +262,8 @@ async function extract(file: string, cwd: string, a: Artifact): Promise<void> {
     },
   });
 }
+
+const utf8 = (s: string) => new Uint8Array(Buffer.from(s, "utf-8"));
 
 /** Cache path → canonical zip path. Collections gain their `ansible_collections` prefix. */
 function canonicalName(a: Artifact, relPath: string): string {
