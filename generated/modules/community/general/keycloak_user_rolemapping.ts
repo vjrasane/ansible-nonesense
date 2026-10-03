@@ -1,0 +1,141 @@
+import { type AnsibleModuleMeta, defineRemoteModule, type RemoteModuleSpec } from "@sensible-ts/core";
+import { ansibleCore, communityGeneral, coreScaffold } from "./artifacts.ts";
+
+// Auto-generated from: community.general.keycloak_user_rolemapping
+// DO NOT EDIT — regenerate with codegen
+const meta: AnsibleModuleMeta = {
+  "fqcn": "community.general.keycloak_user_rolemapping",
+  "actionPlugin": false,
+  "powershell": false,
+  "rawParams": false,
+  "checkMode": "full",
+} as const;
+const spec: RemoteModuleSpec = {
+  fqcn: "community.general.keycloak_user_rolemapping",
+  moduleFqn: "ansible_collections.community.general.plugins.modules.keycloak_user_rolemapping",
+  sources: [{
+    artifact: ansibleCore,
+    files: [
+      "ansible/module_utils/_internal/__init__.py",
+      "ansible/module_utils/_internal/_ansiballz/_loader.py",
+      "ansible/module_utils/_internal/_dataclass_validation.py",
+      "ansible/module_utils/_internal/_datatag/__init__.py",
+      "ansible/module_utils/_internal/_datatag/_tags.py",
+      "ansible/module_utils/_internal/_debugging.py",
+      "ansible/module_utils/_internal/_deprecator.py",
+      "ansible/module_utils/_internal/_errors.py",
+      "ansible/module_utils/_internal/_event_utils.py",
+      "ansible/module_utils/_internal/_json/__init__.py",
+      "ansible/module_utils/_internal/_json/_legacy_encoder.py",
+      "ansible/module_utils/_internal/_json/_profiles/__init__.py",
+      "ansible/module_utils/_internal/_json/_profiles/_module_legacy_c2m.py",
+      "ansible/module_utils/_internal/_json/_profiles/_module_legacy_m2c.py",
+      "ansible/module_utils/_internal/_json/_profiles/_tagless.py",
+      "ansible/module_utils/_internal/_messages.py",
+      "ansible/module_utils/_internal/_patches/__init__.py",
+      "ansible/module_utils/_internal/_patches/_dataclass_annotation_patch.py",
+      "ansible/module_utils/_internal/_patches/_socket_patch.py",
+      "ansible/module_utils/_internal/_patches/_sys_intern_patch.py",
+      "ansible/module_utils/_internal/_plugin_info.py",
+      "ansible/module_utils/_internal/_stack.py",
+      "ansible/module_utils/_internal/_text_utils.py",
+      "ansible/module_utils/_internal/_traceback.py",
+      "ansible/module_utils/_internal/_validation.py",
+      "ansible/module_utils/basic.py",
+      "ansible/module_utils/common/_utils.py",
+      "ansible/module_utils/common/arg_spec.py",
+      "ansible/module_utils/common/collections.py",
+      "ansible/module_utils/common/file.py",
+      "ansible/module_utils/common/json.py",
+      "ansible/module_utils/common/locale.py",
+      "ansible/module_utils/common/parameters.py",
+      "ansible/module_utils/common/process.py",
+      "ansible/module_utils/common/sys_info.py",
+      "ansible/module_utils/common/text/converters.py",
+      "ansible/module_utils/common/text/formatters.py",
+      "ansible/module_utils/common/validation.py",
+      "ansible/module_utils/common/warnings.py",
+      "ansible/module_utils/compat/selinux.py",
+      "ansible/module_utils/compat/typing.py",
+      "ansible/module_utils/datatag.py",
+      "ansible/module_utils/distro/__init__.py",
+      "ansible/module_utils/distro/_distro.py",
+      "ansible/module_utils/errors.py",
+      "ansible/module_utils/parsing/convert_bool.py",
+      "ansible/module_utils/six/__init__.py",
+      "ansible/module_utils/urls.py",
+    ],
+  }, {
+    artifact: communityGeneral,
+    files: ["plugins/module_utils/_keycloak.py", "plugins/modules/keycloak_user_rolemapping.py"],
+  }],
+  scaffold: coreScaffold,
+  markers: [
+    "ansible/module_utils/_internal/_ansiballz/__init__.py",
+    "ansible/module_utils/common/__init__.py",
+    "ansible/module_utils/common/text/__init__.py",
+    "ansible/module_utils/compat/__init__.py",
+    "ansible/module_utils/parsing/__init__.py",
+    "ansible_collections/__init__.py",
+    "ansible_collections/community/__init__.py",
+    "ansible_collections/community/general/__init__.py",
+    "ansible_collections/community/general/plugins/__init__.py",
+    "ansible_collections/community/general/plugins/module_utils/__init__.py",
+    "ansible_collections/community/general/plugins/modules/__init__.py",
+  ],
+} as const;
+export interface KeycloakUserRolemappingArgs {
+  /** OpenID Connect C(client_id) to authenticate to the API with. */
+  auth_client_id?: string;
+  /** Client Secret to use in conjunction with O(auth_client_id) (if required). */
+  auth_client_secret?: string;
+  /** URL to the Keycloak instance. */
+  auth_keycloak_url: string;
+  /** Password to authenticate for API access with. */
+  auth_password?: string;
+  /** Keycloak realm name to authenticate to for API access. */
+  auth_realm?: string;
+  /** Username to authenticate for API access with. */
+  auth_username?: string;
+  /** ID of the client whose role is to be mapped. */
+  cid?: string;
+  /** Name of the client (different than O(cid)) whose role is to be mapped. */
+  client_id?: string;
+  /** Controls the HTTP connections timeout period (in seconds) to Keycloak API. */
+  connection_timeout?: number;
+  /** Configures the HTTP User-Agent header. */
+  http_agent?: string;
+  /** They Keycloak realm under which this role_representation resides. */
+  realm?: string;
+  /** Authentication refresh token for Keycloak API. */
+  refresh_token?: string;
+  /** Roles to be mapped to the user. */
+  roles?: Record<string, unknown> | Record<string, unknown>[];
+  /** Client ID of the service-account-user to be mapped. */
+  service_account_user_client_id?: string;
+  /** State of the user_rolemapping. */
+  state?: "present" | "absent";
+  /** Username of the user roles are mapped to. */
+  target_username?: string;
+  /** Authentication token for Keycloak API. */
+  token?: string;
+  /** ID of the user to be mapped. */
+  uid?: string;
+  /** Verify TLS certificates (do not disable this in production). */
+  validate_certs?: boolean;
+}
+
+export interface KeycloakUserRolemappingReturn {
+  /** Representation of client role mapping after module execution. */
+  end_state?: Record<string, unknown>;
+  /** Representation of existing client role mapping. */
+  existing?: Record<string, unknown>;
+  /** Message as to what action was taken. */
+  msg?: string;
+  /** Representation of proposed client role mapping. */
+  proposed?: Record<string, unknown>;
+}
+export const keycloak_user_rolemapping = defineRemoteModule<KeycloakUserRolemappingArgs, KeycloakUserRolemappingReturn>(
+  spec,
+  meta,
+);

@@ -1,0 +1,121 @@
+import { type AnsibleModuleMeta, defineRemoteModule, type RemoteModuleSpec } from "@sensible-ts/core";
+import { ansibleCore, communityGeneral, coreScaffold } from "./artifacts.ts";
+
+// Auto-generated from: community.general.pacman
+// DO NOT EDIT — regenerate with codegen
+const meta: AnsibleModuleMeta = {
+  "fqcn": "community.general.pacman",
+  "actionPlugin": false,
+  "powershell": false,
+  "rawParams": false,
+  "checkMode": "full",
+} as const;
+const spec: RemoteModuleSpec = {
+  fqcn: "community.general.pacman",
+  moduleFqn: "ansible_collections.community.general.plugins.modules.pacman",
+  sources: [{
+    artifact: ansibleCore,
+    files: [
+      "ansible/module_utils/_internal/__init__.py",
+      "ansible/module_utils/_internal/_ansiballz/_loader.py",
+      "ansible/module_utils/_internal/_dataclass_validation.py",
+      "ansible/module_utils/_internal/_datatag/__init__.py",
+      "ansible/module_utils/_internal/_datatag/_tags.py",
+      "ansible/module_utils/_internal/_debugging.py",
+      "ansible/module_utils/_internal/_deprecator.py",
+      "ansible/module_utils/_internal/_errors.py",
+      "ansible/module_utils/_internal/_event_utils.py",
+      "ansible/module_utils/_internal/_json/__init__.py",
+      "ansible/module_utils/_internal/_json/_legacy_encoder.py",
+      "ansible/module_utils/_internal/_json/_profiles/__init__.py",
+      "ansible/module_utils/_internal/_json/_profiles/_module_legacy_c2m.py",
+      "ansible/module_utils/_internal/_json/_profiles/_module_legacy_m2c.py",
+      "ansible/module_utils/_internal/_json/_profiles/_tagless.py",
+      "ansible/module_utils/_internal/_messages.py",
+      "ansible/module_utils/_internal/_patches/__init__.py",
+      "ansible/module_utils/_internal/_patches/_dataclass_annotation_patch.py",
+      "ansible/module_utils/_internal/_patches/_socket_patch.py",
+      "ansible/module_utils/_internal/_patches/_sys_intern_patch.py",
+      "ansible/module_utils/_internal/_plugin_info.py",
+      "ansible/module_utils/_internal/_stack.py",
+      "ansible/module_utils/_internal/_text_utils.py",
+      "ansible/module_utils/_internal/_traceback.py",
+      "ansible/module_utils/_internal/_validation.py",
+      "ansible/module_utils/basic.py",
+      "ansible/module_utils/common/_utils.py",
+      "ansible/module_utils/common/arg_spec.py",
+      "ansible/module_utils/common/collections.py",
+      "ansible/module_utils/common/file.py",
+      "ansible/module_utils/common/json.py",
+      "ansible/module_utils/common/locale.py",
+      "ansible/module_utils/common/parameters.py",
+      "ansible/module_utils/common/process.py",
+      "ansible/module_utils/common/sys_info.py",
+      "ansible/module_utils/common/text/converters.py",
+      "ansible/module_utils/common/text/formatters.py",
+      "ansible/module_utils/common/validation.py",
+      "ansible/module_utils/common/warnings.py",
+      "ansible/module_utils/compat/selinux.py",
+      "ansible/module_utils/compat/typing.py",
+      "ansible/module_utils/datatag.py",
+      "ansible/module_utils/distro/__init__.py",
+      "ansible/module_utils/distro/_distro.py",
+      "ansible/module_utils/errors.py",
+      "ansible/module_utils/parsing/convert_bool.py",
+      "ansible/module_utils/six/__init__.py",
+    ],
+  }, { artifact: communityGeneral, files: ["plugins/modules/pacman.py"] }],
+  scaffold: coreScaffold,
+  markers: [
+    "ansible/module_utils/_internal/_ansiballz/__init__.py",
+    "ansible/module_utils/common/__init__.py",
+    "ansible/module_utils/common/text/__init__.py",
+    "ansible/module_utils/compat/__init__.py",
+    "ansible/module_utils/parsing/__init__.py",
+    "ansible_collections/__init__.py",
+    "ansible_collections/community/__init__.py",
+    "ansible_collections/community/general/__init__.py",
+    "ansible_collections/community/general/plugins/__init__.py",
+    "ansible_collections/community/general/plugins/modules/__init__.py",
+  ],
+} as const;
+export interface PacmanArgs {
+  /** An alternative package cache directory, passed as C(--cachedir) to all pacman commands. */
+  cachedir?: string;
+  /** Path to an alternative pacman configuration file, passed as C(--config) to all pacman commands. */
+  config?: string;
+  /** Path of the binary to use. This can either be C(pacman) or a pacman compatible AUR helper. */
+  executable?: string;
+  /** Additional option to pass to pacman when enforcing O(state). */
+  extra_args?: string;
+  /** When removing packages, forcefully remove them, without any checks. Same as O(extra_args="--nodeps --nodeps"). */
+  force?: boolean;
+  /** Name or list of names of the package(s) or file(s) to install, upgrade, or remove. Cannot be used in combination with O(upgrade). */
+  name?: string | string[];
+  /** The install reason to set for the packages. */
+  reason?: "dependency" | "explicit";
+  /** Set the install reason for V(all) packages or only for V(new) packages. */
+  reason_for?: "all" | "new";
+  /** When removing packages, do not save modified configuration files as C(.pacsave) files. (passes C(--nosave) to pacman). */
+  remove_nosave?: boolean;
+  /** An alternative installation root directory, passed as C(--root) to all pacman commands. */
+  root?: string;
+  /** Whether to install (V(present) or V(installed), V(latest)), or remove (V(absent) or V(removed)) a package. */
+  state?: "absent" | "installed" | "latest" | "present" | "removed";
+  /** Whether or not to refresh the master package lists. */
+  update_cache?: boolean;
+  /** Additional option to pass to pacman when enforcing O(update_cache). */
+  update_cache_extra_args?: string;
+  /** Whether or not to upgrade the whole system. Cannot be used in combination with O(name). */
+  upgrade?: boolean;
+  /** Additional option to pass to pacman when enforcing O(upgrade). */
+  upgrade_extra_args?: string;
+}
+
+export interface PacmanReturn {
+  /** The changed status of C(pacman -Sy). */
+  cache_updated?: boolean;
+  /** A list of packages that have been changed. */
+  packages?: string | string[];
+}
+export const pacman = defineRemoteModule<PacmanArgs, PacmanReturn>(spec, meta);

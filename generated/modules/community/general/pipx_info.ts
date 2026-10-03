@@ -1,0 +1,203 @@
+import { type AnsibleModuleMeta, defineRemoteModule, type RemoteModuleSpec } from "@sensible-ts/core";
+import { ansibleCore, communityGeneral, coreScaffold } from "./artifacts.ts";
+
+// Auto-generated from: community.general.pipx_info
+// DO NOT EDIT — regenerate with codegen
+const meta: AnsibleModuleMeta = {
+  "fqcn": "community.general.pipx_info",
+  "actionPlugin": false,
+  "powershell": false,
+  "rawParams": false,
+  "checkMode": "full",
+} as const;
+const spec: RemoteModuleSpec = {
+  fqcn: "community.general.pipx_info",
+  moduleFqn: "ansible_collections.community.general.plugins.modules.pipx_info",
+  sources: [{
+    artifact: ansibleCore,
+    files: [
+      "ansible/module_utils/_internal/__init__.py",
+      "ansible/module_utils/_internal/_ansiballz/_loader.py",
+      "ansible/module_utils/_internal/_concurrent/_daemon_threading.py",
+      "ansible/module_utils/_internal/_concurrent/_futures.py",
+      "ansible/module_utils/_internal/_dataclass_validation.py",
+      "ansible/module_utils/_internal/_datatag/__init__.py",
+      "ansible/module_utils/_internal/_datatag/_tags.py",
+      "ansible/module_utils/_internal/_debugging.py",
+      "ansible/module_utils/_internal/_deprecator.py",
+      "ansible/module_utils/_internal/_errors.py",
+      "ansible/module_utils/_internal/_event_utils.py",
+      "ansible/module_utils/_internal/_json/__init__.py",
+      "ansible/module_utils/_internal/_json/_legacy_encoder.py",
+      "ansible/module_utils/_internal/_json/_profiles/__init__.py",
+      "ansible/module_utils/_internal/_json/_profiles/_module_legacy_c2m.py",
+      "ansible/module_utils/_internal/_json/_profiles/_module_legacy_m2c.py",
+      "ansible/module_utils/_internal/_json/_profiles/_tagless.py",
+      "ansible/module_utils/_internal/_messages.py",
+      "ansible/module_utils/_internal/_patches/__init__.py",
+      "ansible/module_utils/_internal/_patches/_dataclass_annotation_patch.py",
+      "ansible/module_utils/_internal/_patches/_socket_patch.py",
+      "ansible/module_utils/_internal/_patches/_sys_intern_patch.py",
+      "ansible/module_utils/_internal/_plugin_info.py",
+      "ansible/module_utils/_internal/_stack.py",
+      "ansible/module_utils/_internal/_text_utils.py",
+      "ansible/module_utils/_internal/_traceback.py",
+      "ansible/module_utils/_internal/_validation.py",
+      "ansible/module_utils/basic.py",
+      "ansible/module_utils/common/_utils.py",
+      "ansible/module_utils/common/arg_spec.py",
+      "ansible/module_utils/common/collections.py",
+      "ansible/module_utils/common/dict_transformations.py",
+      "ansible/module_utils/common/file.py",
+      "ansible/module_utils/common/json.py",
+      "ansible/module_utils/common/locale.py",
+      "ansible/module_utils/common/parameters.py",
+      "ansible/module_utils/common/process.py",
+      "ansible/module_utils/common/sys_info.py",
+      "ansible/module_utils/common/text/converters.py",
+      "ansible/module_utils/common/text/formatters.py",
+      "ansible/module_utils/common/validation.py",
+      "ansible/module_utils/common/warnings.py",
+      "ansible/module_utils/compat/selinux.py",
+      "ansible/module_utils/compat/typing.py",
+      "ansible/module_utils/compat/version.py",
+      "ansible/module_utils/datatag.py",
+      "ansible/module_utils/distro/__init__.py",
+      "ansible/module_utils/distro/_distro.py",
+      "ansible/module_utils/errors.py",
+      "ansible/module_utils/facts/__init__.py",
+      "ansible/module_utils/facts/ansible_collector.py",
+      "ansible/module_utils/facts/collector.py",
+      "ansible/module_utils/facts/compat.py",
+      "ansible/module_utils/facts/default_collectors.py",
+      "ansible/module_utils/facts/hardware/aix.py",
+      "ansible/module_utils/facts/hardware/base.py",
+      "ansible/module_utils/facts/hardware/darwin.py",
+      "ansible/module_utils/facts/hardware/dragonfly.py",
+      "ansible/module_utils/facts/hardware/freebsd.py",
+      "ansible/module_utils/facts/hardware/hpux.py",
+      "ansible/module_utils/facts/hardware/hurd.py",
+      "ansible/module_utils/facts/hardware/linux.py",
+      "ansible/module_utils/facts/hardware/netbsd.py",
+      "ansible/module_utils/facts/hardware/openbsd.py",
+      "ansible/module_utils/facts/hardware/sunos.py",
+      "ansible/module_utils/facts/namespace.py",
+      "ansible/module_utils/facts/network/aix.py",
+      "ansible/module_utils/facts/network/base.py",
+      "ansible/module_utils/facts/network/darwin.py",
+      "ansible/module_utils/facts/network/dragonfly.py",
+      "ansible/module_utils/facts/network/fc_wwn.py",
+      "ansible/module_utils/facts/network/freebsd.py",
+      "ansible/module_utils/facts/network/generic_bsd.py",
+      "ansible/module_utils/facts/network/hpux.py",
+      "ansible/module_utils/facts/network/hurd.py",
+      "ansible/module_utils/facts/network/iscsi.py",
+      "ansible/module_utils/facts/network/linux.py",
+      "ansible/module_utils/facts/network/netbsd.py",
+      "ansible/module_utils/facts/network/nvme.py",
+      "ansible/module_utils/facts/network/openbsd.py",
+      "ansible/module_utils/facts/network/sunos.py",
+      "ansible/module_utils/facts/other/facter.py",
+      "ansible/module_utils/facts/other/ohai.py",
+      "ansible/module_utils/facts/sysctl.py",
+      "ansible/module_utils/facts/system/apparmor.py",
+      "ansible/module_utils/facts/system/caps.py",
+      "ansible/module_utils/facts/system/chroot.py",
+      "ansible/module_utils/facts/system/cmdline.py",
+      "ansible/module_utils/facts/system/date_time.py",
+      "ansible/module_utils/facts/system/distribution.py",
+      "ansible/module_utils/facts/system/dns.py",
+      "ansible/module_utils/facts/system/env.py",
+      "ansible/module_utils/facts/system/fips.py",
+      "ansible/module_utils/facts/system/loadavg.py",
+      "ansible/module_utils/facts/system/local.py",
+      "ansible/module_utils/facts/system/lsb.py",
+      "ansible/module_utils/facts/system/pkg_mgr.py",
+      "ansible/module_utils/facts/system/platform.py",
+      "ansible/module_utils/facts/system/python.py",
+      "ansible/module_utils/facts/system/selinux.py",
+      "ansible/module_utils/facts/system/service_mgr.py",
+      "ansible/module_utils/facts/system/ssh_pub_keys.py",
+      "ansible/module_utils/facts/system/systemd.py",
+      "ansible/module_utils/facts/system/user.py",
+      "ansible/module_utils/facts/timeout.py",
+      "ansible/module_utils/facts/utils.py",
+      "ansible/module_utils/facts/virtual/base.py",
+      "ansible/module_utils/facts/virtual/dragonfly.py",
+      "ansible/module_utils/facts/virtual/freebsd.py",
+      "ansible/module_utils/facts/virtual/hpux.py",
+      "ansible/module_utils/facts/virtual/linux.py",
+      "ansible/module_utils/facts/virtual/netbsd.py",
+      "ansible/module_utils/facts/virtual/openbsd.py",
+      "ansible/module_utils/facts/virtual/sunos.py",
+      "ansible/module_utils/facts/virtual/sysctl.py",
+      "ansible/module_utils/parsing/convert_bool.py",
+      "ansible/module_utils/six/__init__.py",
+    ],
+  }, {
+    artifact: communityGeneral,
+    files: [
+      "plugins/module_utils/_cmd_runner.py",
+      "plugins/module_utils/_cmd_runner_fmt.py",
+      "plugins/module_utils/_mh/base.py",
+      "plugins/module_utils/_mh/deco.py",
+      "plugins/module_utils/_mh/exceptions.py",
+      "plugins/module_utils/_mh/mixins/deprecate_attrs.py",
+      "plugins/module_utils/_mh/mixins/state.py",
+      "plugins/module_utils/_mh/module_helper.py",
+      "plugins/module_utils/_module_helper.py",
+      "plugins/module_utils/_pipx.py",
+      "plugins/module_utils/_vardict.py",
+      "plugins/module_utils/_version.py",
+      "plugins/modules/pipx_info.py",
+    ],
+  }],
+  scaffold: coreScaffold,
+  markers: [
+    "ansible/module_utils/_internal/_ansiballz/__init__.py",
+    "ansible/module_utils/_internal/_concurrent/__init__.py",
+    "ansible/module_utils/common/__init__.py",
+    "ansible/module_utils/common/text/__init__.py",
+    "ansible/module_utils/compat/__init__.py",
+    "ansible/module_utils/facts/hardware/__init__.py",
+    "ansible/module_utils/facts/network/__init__.py",
+    "ansible/module_utils/facts/other/__init__.py",
+    "ansible/module_utils/facts/system/__init__.py",
+    "ansible/module_utils/facts/virtual/__init__.py",
+    "ansible/module_utils/parsing/__init__.py",
+    "ansible_collections/__init__.py",
+    "ansible_collections/community/__init__.py",
+    "ansible_collections/community/general/__init__.py",
+    "ansible_collections/community/general/plugins/__init__.py",
+    "ansible_collections/community/general/plugins/module_utils/__init__.py",
+    "ansible_collections/community/general/plugins/module_utils/_mh/__init__.py",
+    "ansible_collections/community/general/plugins/module_utils/_mh/mixins/__init__.py",
+    "ansible_collections/community/general/plugins/modules/__init__.py",
+  ],
+} as const;
+export interface PipxInfoArgs {
+  /** Path to the C(pipx) installed in the system. */
+  executable?: string;
+  /** The module passes the C(--global) argument to C(pipx), to execute actions in global scope. */
+  global?: boolean;
+  /** Include dependent packages in the output. */
+  include_deps?: boolean;
+  /** Include injected packages in the output. */
+  include_injected?: boolean;
+  /** Returns the raw output of C(pipx list --json). */
+  include_raw?: boolean;
+  /** Name of an application installed with C(pipx). */
+  name?: string;
+}
+
+export interface PipxInfoReturn {
+  /** The list of installed applications. */
+  application?: Record<string, unknown> | Record<string, unknown>[];
+  /** Command executed to obtain the list of installed applications. */
+  cmd?: string | string[];
+  /** The raw output of the C(pipx list) command, when O(include_raw=true). Used for debugging. */
+  raw_output?: Record<string, unknown>;
+  /** Version of pipx. */
+  version?: string;
+}
+export const pipx_info = defineRemoteModule<PipxInfoArgs, PipxInfoReturn>(spec, meta);

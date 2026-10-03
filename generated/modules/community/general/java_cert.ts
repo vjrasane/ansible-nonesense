@@ -1,0 +1,137 @@
+import { type AnsibleModuleMeta, defineRemoteModule, type RemoteModuleSpec } from "@sensible-ts/core";
+import { ansibleCore, communityGeneral, coreScaffold } from "./artifacts.ts";
+
+// Auto-generated from: community.general.java_cert
+// DO NOT EDIT — regenerate with codegen
+const meta: AnsibleModuleMeta = {
+  "fqcn": "community.general.java_cert",
+  "actionPlugin": false,
+  "powershell": false,
+  "rawParams": false,
+  "checkMode": "full",
+} as const;
+const spec: RemoteModuleSpec = {
+  fqcn: "community.general.java_cert",
+  moduleFqn: "ansible_collections.community.general.plugins.modules.java_cert",
+  sources: [{
+    artifact: ansibleCore,
+    files: [
+      "ansible/module_utils/_internal/__init__.py",
+      "ansible/module_utils/_internal/_ansiballz/_loader.py",
+      "ansible/module_utils/_internal/_dataclass_validation.py",
+      "ansible/module_utils/_internal/_datatag/__init__.py",
+      "ansible/module_utils/_internal/_datatag/_tags.py",
+      "ansible/module_utils/_internal/_debugging.py",
+      "ansible/module_utils/_internal/_deprecator.py",
+      "ansible/module_utils/_internal/_errors.py",
+      "ansible/module_utils/_internal/_event_utils.py",
+      "ansible/module_utils/_internal/_json/__init__.py",
+      "ansible/module_utils/_internal/_json/_legacy_encoder.py",
+      "ansible/module_utils/_internal/_json/_profiles/__init__.py",
+      "ansible/module_utils/_internal/_json/_profiles/_module_legacy_c2m.py",
+      "ansible/module_utils/_internal/_json/_profiles/_module_legacy_m2c.py",
+      "ansible/module_utils/_internal/_json/_profiles/_tagless.py",
+      "ansible/module_utils/_internal/_messages.py",
+      "ansible/module_utils/_internal/_patches/__init__.py",
+      "ansible/module_utils/_internal/_patches/_dataclass_annotation_patch.py",
+      "ansible/module_utils/_internal/_patches/_socket_patch.py",
+      "ansible/module_utils/_internal/_patches/_sys_intern_patch.py",
+      "ansible/module_utils/_internal/_plugin_info.py",
+      "ansible/module_utils/_internal/_stack.py",
+      "ansible/module_utils/_internal/_text_utils.py",
+      "ansible/module_utils/_internal/_traceback.py",
+      "ansible/module_utils/_internal/_validation.py",
+      "ansible/module_utils/basic.py",
+      "ansible/module_utils/common/_utils.py",
+      "ansible/module_utils/common/arg_spec.py",
+      "ansible/module_utils/common/collections.py",
+      "ansible/module_utils/common/file.py",
+      "ansible/module_utils/common/json.py",
+      "ansible/module_utils/common/locale.py",
+      "ansible/module_utils/common/parameters.py",
+      "ansible/module_utils/common/process.py",
+      "ansible/module_utils/common/sys_info.py",
+      "ansible/module_utils/common/text/converters.py",
+      "ansible/module_utils/common/text/formatters.py",
+      "ansible/module_utils/common/validation.py",
+      "ansible/module_utils/common/warnings.py",
+      "ansible/module_utils/compat/selinux.py",
+      "ansible/module_utils/compat/typing.py",
+      "ansible/module_utils/datatag.py",
+      "ansible/module_utils/distro/__init__.py",
+      "ansible/module_utils/distro/_distro.py",
+      "ansible/module_utils/errors.py",
+      "ansible/module_utils/parsing/convert_bool.py",
+      "ansible/module_utils/six/__init__.py",
+    ],
+  }, { artifact: communityGeneral, files: ["plugins/modules/java_cert.py"] }],
+  scaffold: coreScaffold,
+  markers: [
+    "ansible/module_utils/_internal/_ansiballz/__init__.py",
+    "ansible/module_utils/common/__init__.py",
+    "ansible/module_utils/common/text/__init__.py",
+    "ansible/module_utils/compat/__init__.py",
+    "ansible/module_utils/parsing/__init__.py",
+    "ansible_collections/__init__.py",
+    "ansible_collections/community/__init__.py",
+    "ansible_collections/community/general/__init__.py",
+    "ansible_collections/community/general/plugins/__init__.py",
+    "ansible_collections/community/general/plugins/modules/__init__.py",
+  ],
+} as const;
+export interface JavaCertArgs {
+  /** The attributes the resulting filesystem object should have. */
+  attributes?: string;
+  /** Imported certificate alias. */
+  cert_alias?: string;
+  /** Content of the certificate used to create the keystore. */
+  cert_content?: string;
+  /** Local path to load certificate from. */
+  cert_path?: string;
+  /** Port to connect to URL. */
+  cert_port?: number;
+  /** Basic URL to fetch SSL certificate from. */
+  cert_url?: string;
+  /** Path to keytool binary if not used we search in PATH for it. */
+  executable?: string;
+  /** Name of the group that should own the filesystem object, as would be fed to C(chown). */
+  group?: string;
+  /** Create keystore if it does not exist. */
+  keystore_create?: boolean;
+  /** Keystore password. */
+  keystore_pass: string;
+  /** Path to keystore. */
+  keystore_path?: string;
+  /** Keystore type (JCEKS, JKS). */
+  keystore_type?: string;
+  /** The permissions the resulting filesystem object should have. */
+  mode?: unknown;
+  /** Name of the user that should own the filesystem object, as would be fed to C(chown). */
+  owner?: string;
+  /** Alias in the PKCS12 keystore. */
+  pkcs12_alias?: string;
+  /** Password for importing from PKCS12 keystore. */
+  pkcs12_password?: string;
+  /** Local path to load PKCS12 keystore from. */
+  pkcs12_path?: string;
+  /** The level part of the SELinux filesystem object context. */
+  selevel?: string;
+  /** The role part of the SELinux filesystem object context. */
+  serole?: string;
+  /** The type part of the SELinux filesystem object context. */
+  setype?: string;
+  /** The user part of the SELinux filesystem object context. */
+  seuser?: string;
+  /** Defines action which can be either certificate import or removal. */
+  state?: "absent" | "present";
+  /** Trust imported cert as CAcert. */
+  trust_cacert?: boolean;
+  /** Influence when to use atomic operation to prevent data corruption or inconsistent reads from the target filesystem object. */
+  unsafe_writes?: boolean;
+}
+
+export interface JavaCertReturn {
+  /** Executed command to get action done. */
+  cmd?: string;
+}
+export const java_cert = defineRemoteModule<JavaCertArgs, JavaCertReturn>(spec, meta);
