@@ -1,7 +1,7 @@
 import { ModuleError, ModuleFn } from "src/module/module.ts";
 import { ActionFn } from "src/module/action.ts";
-import { HostFacts } from "src/host.ts";
-import { currentHost } from "src/context.ts";
+import { HostFacts } from "src/core/host.ts";
+import { currentHost } from "src/core/context.ts";
 
 interface DispatchArgs {
   use?: string;

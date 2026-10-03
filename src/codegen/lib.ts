@@ -1,9 +1,9 @@
-import { Artifact, Cache } from "src/cache.ts";
+import { Artifact, Cache } from "src/core/cache.ts";
 import { execFile, spawn } from "node:child_process";
 import { mkdir, mkdtemp, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { promisify } from "node:util";
-import { env, toolName } from "src/config.ts";
+import { env, toolName } from "src/core/config.ts";
 import path from "node:path";
 import type { CodegenResult } from "./emit.ts";
 
@@ -46,7 +46,9 @@ export async function getLatestVersion(name: string): Promise<string> {
   const url = `${GALAXY}/${ns}/${coll}/`;
   const res = await fetch(url);
   if (!res.ok)
-    throw new Error(`${name} latest version not found (${res.status}) at ${url}`);
+    throw new Error(
+      `${name} latest version not found (${res.status}) at ${url}`,
+    );
   const j = await res.json();
   const version = j.highest_version?.version;
   if (!version) throw new Error(`${name} latest version not in response`);
@@ -59,7 +61,9 @@ export async function getArtifact(
 ): Promise<Artifact> {
   const id = `${name}@${version}`;
   if (name === "ansible.builtin" || name === "ansible.legacy")
-    throw new Error(`${name} ships in ansible-core - use ansible-core@<version>`);
+    throw new Error(
+      `${name} ships in ansible-core - use ansible-core@<version>`,
+    );
 
   const [ns, coll] = name.split(".");
   const url = `${GALAXY}/${ns}/${coll}/versions/${version}/`;

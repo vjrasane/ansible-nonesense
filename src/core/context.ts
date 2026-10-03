@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import { randomBytes, randomUUID } from "node:crypto";
-import { localhost, type Host } from "src/host.ts";
+import { randomBytes } from "node:crypto";
+import { localhost, type Host } from "src/core/host.ts";
 import type { ModuleExecOpts } from "src/module/module.ts";
 import {
   emit,
@@ -8,7 +8,7 @@ import {
   SpanKind,
   SpanStatus,
   toSpanError,
-} from "src/span.ts";
+} from "src/core/events.ts";
 
 export interface ExecContext {
   host: Host;
@@ -16,7 +16,14 @@ export interface ExecContext {
   spanId?: string;
 }
 
-const storage = new AsyncLocalStorage<ExecContext>();
+// Anchored on globalThis so a duplicate core instance (e.g. tsx resolving a
+// dynamically-imported chunk's `@sensible-ts/core` to a different module URL than
+// the static graph) shares one store; otherwise context set in run() is invisible
+// to the other instance and currentContext() wrongly falls back to localhost.
+const STORAGE_KEY = Symbol.for("@sensible-ts/core#execStorage");
+const g = globalThis as unknown as Record<symbol, AsyncLocalStorage<ExecContext>>;
+const storage: AsyncLocalStorage<ExecContext> = (g[STORAGE_KEY] ??=
+  new AsyncLocalStorage<ExecContext>());
 
 let defaultLocalContext: ExecContext | undefined;
 

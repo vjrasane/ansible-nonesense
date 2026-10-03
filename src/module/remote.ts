@@ -1,5 +1,5 @@
-import { currentContext } from "src/context.ts";
-import { CACHE } from "src/cache.ts";
+import { currentContext } from "src/core/context.ts";
+import { CACHE } from "src/core/cache.ts";
 import {
   AnsibleModuleMeta,
   getModuleFn,
@@ -9,11 +9,10 @@ import {
   ModuleFn,
   ModuleResult,
   ModuleSkippedResult,
-  ModuleStatus,
   RawResult,
 } from "src/module/module.ts";
-import { execPythonOnHost } from "src/host.ts";
-import { ArtifactFiles, ScaffoldFile } from "src/cache.ts";
+import { execPythonOnHost } from "src/core/host.ts";
+import { ArtifactFiles, ScaffoldFile } from "src/core/cache.ts";
 
 const ANSIBLE_VERSION = "2.17.x"; // the generated version const
 
@@ -109,33 +108,34 @@ export class RemoteModule<
       "    extensions={},",
       ")",
     ].join("\n");
-    const raw: RawResult<TReturn> = await execPythonOnHost(ctx.host, wrapper);
+    const raw: RawResult<TReturn> = await execPythonOnHost(ctx.host, wrapper, {
+      become: mergedOpts.become,
+    });
 
-    const failed = raw.failed === true;
-    const skipped = raw.skipped === true;
-    const changed = raw.changed === true;
-
-    let status: ModuleStatus;
-    if (failed) status = "failed";
-    else if (skipped) status = "skipped";
-    else if (changed) status = "changed";
-    else status = "ok";
-
-    switch (status) {
-      case "failed":
-        throw new ModuleError(this.meta.fqcn, raw); // fail-fast; see note
-      case "skipped":
-        return { ...raw, ...SKIPPED_RESULT };
-      default:
-        return {
-          ...raw,
-          status,
-          failed: false,
-          skipped: false,
-          changed,
-        };
-    }
+    return finalizeResult(this.meta.fqcn, raw, mergedOpts.ignoreErrors ?? false);
   }
+}
+
+// Maps a raw module result to a typed ModuleResult. A failed result throws
+// (fail-fast) unless `ignoreErrors`, in which case it is returned so the caller
+// can inspect rc/stdout — Ansible's `ignore_errors`.
+export function finalizeResult<TReturn>(
+  fqcn: string,
+  raw: RawResult<TReturn>,
+  ignoreErrors: boolean,
+): ModuleResult<TReturn> {
+  if (raw.failed === true) {
+    if (!ignoreErrors) throw new ModuleError(fqcn, raw);
+    return { ...raw, status: "failed", failed: true, skipped: false };
+  }
+  if (raw.skipped === true) return { ...raw, ...SKIPPED_RESULT };
+  return {
+    ...raw,
+    status: raw.changed === true ? "changed" : "ok",
+    failed: false,
+    skipped: false,
+    changed: raw.changed === true,
+  };
 }
 
 export function defineRemoteModule<TArgs extends Record<string, any>, TReturn>(

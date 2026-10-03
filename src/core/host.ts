@@ -1,12 +1,13 @@
-import { readFileSync } from "node:fs";
 import {
   Connection,
+  ExecOpts,
   LocalConnection,
   SSHConfig,
   SSHConnection,
-} from "src/connection.ts";
-import { withContext } from "src/context.ts";
-import { Runner, defaultRunner } from "src/runner.ts";
+} from "src/core/connection.ts";
+import { withContext } from "src/core/context.ts";
+import { Runner, defaultRunner } from "src/core/runner.ts";
+import { FACT_PROBE } from "./fact-probe.ts";
 
 type HostOpts = {
   pythonPath?: string;
@@ -16,15 +17,13 @@ export interface HostFacts {
   ansible_service_mgr: string;
   ansible_pkg_mgr: string;
   ansible_system: string;
+  ansible_user_id: string;
+  ansible_user_dir: string;
 }
-
-const FACT_PROBE = readFileSync(
-  new URL("../scripts/fact-probe.sh", import.meta.url),
-  "utf-8",
-);
 
 export interface HostRef {
   readonly name: string;
+  readonly facts: Promise<HostFacts>;
   run<T>(fn: () => Promise<T>): Promise<T>;
 }
 
@@ -36,13 +35,13 @@ export class Host implements HostRef {
     public readonly name: string,
     public readonly connection: Connection,
     private readonly opts: HostOpts = {},
-    public readonly explicitRunner?: Runner,
+    public readonly _runner?: Runner,
   ) {
     this.pythonInterpreter = null;
   }
 
   get runner(): Runner {
-    return this.explicitRunner ?? defaultRunner;
+    return this._runner ?? defaultRunner;
   }
 
   get facts(): Promise<HostFacts> {
@@ -97,6 +96,12 @@ export class Host implements HostRef {
         case "system":
           facts.ansible_system = value;
           break;
+        case "user":
+          facts.ansible_user_id = value;
+          break;
+        case "user_dir":
+          facts.ansible_user_dir = value;
+          break;
       }
     }
 
@@ -111,9 +116,11 @@ export class Host implements HostRef {
 export async function execPythonOnHost(
   host: Host,
   script: string,
+  opts: ExecOpts = {},
 ): Promise<any> {
   const interp = await host.interpreter;
   const { rc, stdout, stderr } = await host.connection.exec([interp], {
+    ...opts,
     stdin: Buffer.from(script),
   });
   try {
@@ -126,7 +133,7 @@ export async function execPythonOnHost(
   }
 }
 
-interface RemoteHostConfig extends SSHConfig, HostOpts {}
+interface RemoteHostConfig extends Partial<SSHConfig>, HostOpts {}
 
 interface LocalHostConfig extends HostOpts {}
 

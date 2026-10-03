@@ -1,15 +1,15 @@
-#!/bin/sh
-for entry in \
-  /usr/bin/rpm-ostree:atomic_container \
-  /usr/bin/dnf5:dnf5 \
-  /usr/bin/dnf:dnf \
-  /usr/bin/yum:dnf \
-  /usr/bin/apt-get:apt \
-  /usr/bin/zypper:zypper \
-  /usr/bin/pacman:pacman \
+export const FACT_PROBE = `#!/bin/sh
+for entry in \\
+  /usr/bin/rpm-ostree:atomic_container \\
+  /usr/bin/dnf5:dnf5 \\
+  /usr/bin/dnf:dnf \\
+  /usr/bin/yum:dnf \\
+  /usr/bin/apt-get:apt \\
+  /usr/bin/zypper:zypper \\
+  /usr/bin/pacman:pacman \\
   /sbin/apk:apk; do
-  bin=${entry%%:*}
-  name=${entry##*:}
+  bin=\${entry%%:*}
+  name=\${entry##*:}
   if [ -x "$bin" ]; then
     echo "pkg_mgr=$name"
     break
@@ -27,3 +27,6 @@ else
 fi
 
 echo "system=$(uname -s)"
+echo "user=$(id -un)"
+echo "user_dir=$HOME"
+`;

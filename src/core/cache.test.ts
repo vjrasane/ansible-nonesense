@@ -1,9 +1,16 @@
 import { afterEach, describe, expect, test } from "vitest";
-import { access, mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import {
+  access,
+  mkdir,
+  mkdtemp,
+  readdir,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { unzipSync } from "fflate";
-import { Cache, type Artifact, type PayloadSpec } from "./cache.ts";
+import { Cache, type Artifact, type PayloadSpec } from "../cache.tshe.ts";
 
 const core: Artifact = {
   id: "ansible-core@2.17.14",
@@ -32,7 +39,12 @@ describe("Cache.getArtifactDir", () => {
 
   test("keys a collection by its dotted name, not the kind", () => {
     expect(cache.getArtifactDir(collection)).toBe(
-      path.join("/cache", "artifacts", "community.general", "9.4.0-503f6e25c9ab"),
+      path.join(
+        "/cache",
+        "artifacts",
+        "community.general",
+        "9.4.0-503f6e25c9ab",
+      ),
     );
   });
 });
@@ -49,13 +61,23 @@ describe("Cache.buildPayload", () => {
     root = await mkdtemp(path.join(tmpdir(), "sensible-"));
     const cache = new Cache(root);
     const coreDir = cache.getArtifactDir(core);
-    await mkdir(path.join(coreDir, "ansible", "module_utils"), { recursive: true });
-    await writeFile(path.join(coreDir, "ansible", "module_utils", "basic.py"), "core");
+    await mkdir(path.join(coreDir, "ansible", "module_utils"), {
+      recursive: true,
+    });
+    await writeFile(
+      path.join(coreDir, "ansible", "module_utils", "basic.py"),
+      "core",
+    );
     const cgDir = cache.getArtifactDir(collection);
     await mkdir(path.join(cgDir, "plugins", "modules"), { recursive: true });
-    await mkdir(path.join(cgDir, "plugins", "module_utils"), { recursive: true });
+    await mkdir(path.join(cgDir, "plugins", "module_utils"), {
+      recursive: true,
+    });
     await writeFile(path.join(cgDir, "plugins", "modules", "apk.py"), "mod");
-    await writeFile(path.join(cgDir, "plugins", "module_utils", "version.py"), "util");
+    await writeFile(
+      path.join(cgDir, "plugins", "module_utils", "version.py"),
+      "util",
+    );
     return cache;
   }
 
@@ -75,13 +97,17 @@ describe("Cache.buildPayload", () => {
 
   test("zips closure files at their canonical FQN paths", async () => {
     const cache = await seed();
-    const entries = unzipSync(Buffer.from(await cache.buildPayload(spec), "base64"));
+    const entries = unzipSync(
+      Buffer.from(await cache.buildPayload(spec), "base64"),
+    );
     expect(Object.keys(entries).sort()).toEqual([
       "ansible/module_utils/basic.py",
       "ansible_collections/community/general/plugins/module_utils/version.py",
       "ansible_collections/community/general/plugins/modules/apk.py",
     ]);
-    expect(Buffer.from(entries["ansible/module_utils/basic.py"]).toString()).toBe("core");
+    expect(
+      Buffer.from(entries["ansible/module_utils/basic.py"]).toString(),
+    ).toBe("core");
   });
 
   test("writes a disk-cached zip under payloadsDir", async () => {
@@ -89,6 +115,8 @@ describe("Cache.buildPayload", () => {
     await cache.buildPayload(spec);
     const dirs = await readdir(cache.payloadsDir);
     expect(dirs).toHaveLength(1);
-    await access(path.join(cache.payloadsDir, dirs[0], "community.general.apk.zip"));
+    await access(
+      path.join(cache.payloadsDir, dirs[0], "community.general.apk.zip"),
+    );
   });
 });

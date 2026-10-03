@@ -15,6 +15,10 @@
     "./community-general": {
       "types": "./dist/community-general/index.d.ts",
       "default": "./dist/community-general/index.js"
+    },
+    "./posix": {
+      "types": "./dist/posix/index.d.ts",
+      "default": "./dist/posix/index.js"
     }
   },
   "files": [
@@ -24,7 +28,7 @@
     "dev": "tsx",
     "build": "tsup",
     "build:watch": "tsup --watch",
-    "codegen": "tsx src/codegen/codegen-builtin.ts && tsx src/codegen/codegen-collection.ts community.general",
+    "codegen": "npm run codegen:builtin && npm run codegen:collection community.general && npm run codegen:collection ansible.posix",
     "codegen:builtin": "tsx src/codegen/codegen-builtin.ts",
     "codegen:collection": "tsx src/codegen/codegen-collection.ts",
     "test": "vitest run"

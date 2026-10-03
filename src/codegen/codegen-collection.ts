@@ -1,7 +1,7 @@
 import path from "node:path";
 import { mkdir, rm, writeFile } from "node:fs/promises";
-import { Cache } from "src/cache.ts";
-import { env } from "src/config.ts";
+import { Cache } from "src/core/cache.ts";
+import { env } from "src/core/config.ts";
 import { emitCollection } from "./emit.ts";
 import {
   buildCollectionsView,
@@ -21,7 +21,8 @@ async function main() {
   // Installed core is the shared pin; the collection is downloaded and exposed
   // through an ephemeral view so the python loader can discover it.
   const core = await getCoreArtifact();
-  const version = env("COLLECTION_VERSION") ?? (await getLatestVersion(collection));
+  const version =
+    env("COLLECTION_VERSION") ?? (await getLatestVersion(collection));
   const artifact = await getArtifact(collection, version);
 
   const cache = new Cache();

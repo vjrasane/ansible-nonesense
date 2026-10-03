@@ -1,5 +1,6 @@
-import { currentContext, currentRunner } from "src/context.ts";
-import { ModuleError } from "./module/module.ts";
+import { currentContext, currentRunner } from "src/core/context.ts";
+import { ModuleError } from "src/module/module.ts";
+import { consoleLogger, LOG_LEVEL, logReporter, withLevel } from "./logger.ts";
 
 interface Span {
   kind: SpanKind;
@@ -59,4 +60,13 @@ export function toSpanError(e: unknown): SpanError {
 export function emit(ev: SpanEvent) {
   const spanId = currentContext().spanId;
   currentRunner().emit({ ...ev, parentId: spanId });
+}
+export type EventHandler = (event: SpanEvent) => void;
+
+let lazyDefault: EventHandler | null = null;
+export let defaultEventHandler: EventHandler = (ev) =>
+  (lazyDefault ??= logReporter(withLevel(consoleLogger, LOG_LEVEL)))(ev);
+
+export function setEventHandler(handler: EventHandler) {
+  defaultEventHandler = handler;
 }

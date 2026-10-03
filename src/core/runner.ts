@@ -1,31 +1,25 @@
-import { withOptions } from "src/context.ts";
-import { host, HostConfig, HostRef } from "src/host.ts";
+import { withOptions } from "src/core/context.ts";
+import { host, HostConfig, HostRef } from "src/core/host.ts";
 import { ModuleExecOpts } from "src/module/module.ts";
-import { SpanEvent } from "src/span.ts";
-import {
-  consoleLogger,
-  EventHandler,
-  Logger,
-  LogReporter,
-  withLevel,
-} from "src/reporter.ts";
 import { FatalError } from "./errors.ts";
+import {
+  defaultEventHandler,
+  EventHandler,
+  SpanEvent,
+} from "src/core/events.ts";
+import { Logger, logReporter } from "./logger.ts";
 
 export class Runner {
   private fatal: FatalError | null = null;
 
-  private reporter: LogReporter = new LogReporter(
-    withLevel(consoleLogger, "info"),
-  );
-
   constructor(
     private opts: ModuleExecOpts = {},
-    private handler: EventHandler = this.defaultHandler,
+    private _handler?: EventHandler,
   ) {}
 
-  private defaultHandler = (e: SpanEvent) => {
-    this.reporter.report(e);
-  };
+  private get handler(): EventHandler {
+    return this._handler ?? defaultEventHandler;
+  }
 
   run<T>(fn: () => Promise<T>): Promise<T> {
     return withOptions(this.opts, async () => {
@@ -56,11 +50,11 @@ export class Runner {
   }
 
   setHandler(handler: EventHandler) {
-    this.handler = handler;
+    this._handler = handler;
   }
 
   setLogger(logger: Logger) {
-    this.reporter = new LogReporter(logger);
+    this._handler = logReporter(logger);
   }
 
   setFatal(err: FatalError) {

@@ -1,5 +1,5 @@
-import { currentHost, currentRunner } from "src/context.ts";
-import { Host } from "src/host.ts";
+import { currentHost, currentRunner } from "src/core/context.ts";
+import { Host } from "src/core/host.ts";
 import {
   getModuleFn,
   Module,
@@ -7,7 +7,7 @@ import {
   ModuleFn,
   ModuleResult,
 } from "src/module/module.ts";
-import { Runner } from "src/runner.ts";
+import { Runner } from "src/core/runner.ts";
 
 interface CustomModuleContext {
   host: Host;

@@ -24,7 +24,13 @@ export interface ExecOpts {
   stdin?: Buffer;
   env?: Record<string, string>;
   timeout?: number;
+  become?: boolean;
 }
+
+// Escalation is a launch-layer concern: wrap the command with sudo. `-n` keeps it
+// non-interactive so it never prompts on the stdin we may be piping a payload to.
+export const becomeArgv = (argv: string[], opts: ExecOpts): string[] =>
+  opts.become ? ["sudo", "-H", "-n", ...argv] : argv;
 
 export interface Connection {
   exec(argv: string[], opts?: ExecOpts): Promise<ExecResult>;
@@ -42,7 +48,7 @@ abstract class AbstractConnection implements Connection {
   abstract close(): Promise<void>;
 
   async exec(argv: string[], opts: ExecOpts = {}): Promise<ExecResult> {
-    const p = this.spawn(argv, opts);
+    const p = this.spawn(becomeArgv(argv, opts), opts);
     const out: Buffer[] = [];
     p.stdout.on("data", (c) => out.push(c));
     if (opts.stdin) p.stdin.write(opts.stdin);
@@ -138,7 +144,7 @@ export class LocalConnection extends AbstractConnection {
 }
 
 export interface SSHConfig {
-  host?: string;
+  host: string;
   user?: string;
   port?: number;
   identityFile?: string;

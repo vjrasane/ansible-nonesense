@@ -1,5 +1,5 @@
-import { currentRunner, withOptions, withSpan } from "src/context.ts";
-import { isFatal } from "src/errors.ts";
+import { currentRunner, withOptions, withSpan } from "src/core/context.ts";
+import { isFatal } from "src/core/errors.ts";
 
 export type ModuleStatus = "ok" | "changed" | "failed" | "skipped";
 
@@ -11,9 +11,16 @@ export type ModuleSkippedResult<TReturn> = Partial<TReturn> & {
 };
 
 export type ModuleRanResult<TReturn> = RawResult<TReturn> & {
-  status: Exclude<ModuleStatus, "skipped">;
+  status: "ok" | "changed";
   changed: boolean;
   failed: false;
+  skipped: false;
+};
+
+export type ModuleFailedResult<TReturn> = RawResult<TReturn> & {
+  status: "failed";
+  changed: boolean;
+  failed: true;
   skipped: false;
 };
 
@@ -27,6 +34,7 @@ export type RawResult<TReturn> = TReturn & {
 
 export type ModuleResult<TReturn> =
   | ModuleRanResult<TReturn>
+  | ModuleFailedResult<TReturn>
   | ModuleSkippedResult<TReturn>;
 
 export class ModuleError extends Error {
@@ -46,6 +54,7 @@ export interface ModuleExecOpts {
   noLog?: boolean;
   become?: boolean;
   env?: Record<string, string>;
+  ignoreErrors?: boolean;
 }
 
 export interface Module<TArgs extends Record<string, any>, TReturn> {

@@ -1,5 +1,5 @@
 import { join, basename } from "path";
-import { currentHost } from "src/context.ts";
+import { currentHost } from "src/core/context.ts";
 import {
   AnsibleModuleMeta,
   getModuleFn,
@@ -11,7 +11,7 @@ import {
 } from "src/module/module.ts";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { packageName } from "src/config.ts";
+import { toolName } from "src/core/config.ts";
 import { dirname } from "node:path";
 
 /**
@@ -84,7 +84,7 @@ async function writeLocalTemp(
   content: string,
   name: string = "content",
 ): Promise<string> {
-  const dir = await mkdtemp(join(tmpdir(), packageName + "-"));
+  const dir = await mkdtemp(join(tmpdir(), toolName + "-"));
   const path = join(dir, name);
   await writeFile(path, content);
   return path;
@@ -123,6 +123,16 @@ export async function copyAction<TReturn>(
       await rm(localDir, { recursive: true, force: true });
   }
 }
+// ansible.builtin.shell has no shippable module: it is the command module run
+// with _uses_shell. Mirror ansible's shell action plugin by delegating to command.
+export function shellAction<TArgs extends Record<string, any>, TReturn>(
+  args: TArgs,
+  opts: ModuleExecOpts | undefined,
+  mod: ModuleFn<TArgs, TReturn>,
+): Promise<ModuleResult<TReturn>> {
+  return mod({ ...args, _uses_shell: true }, opts);
+}
+
 export interface FetchArgs {
   dest: string;
   fail_on_missing?: boolean;

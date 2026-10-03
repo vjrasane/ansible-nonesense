@@ -1,5 +1,5 @@
 import envPaths from "env-paths";
-import pkg from "../package.json" with { type: "json" };
+import pkg from "../../package.json" with { type: "json" };
 
 export const packageName = pkg.name;
 

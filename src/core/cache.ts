@@ -6,9 +6,14 @@ import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { zipSync } from "fflate";
 import * as tar from "tar";
-import { cacheDir, toolName } from "src/config.ts";
-import { FatalError } from "src/errors.ts";
-import { toSpanError, type SpanEvent, type SpanKind } from "src/span.ts";
+import { cacheDir, toolName } from "src/core/config.ts";
+import { FatalError } from "src/core/errors.ts";
+import {
+  toSpanError,
+  type SpanEvent,
+  type SpanKind,
+  defaultEventHandler,
+} from "src/core/events.ts";
 import { withRetry } from "src/utils.ts";
 
 export interface Artifact {
@@ -53,8 +58,12 @@ export class Cache {
   constructor(
     private readonly root = cacheDir,
     private readonly opts: CacheOpts = {},
-    private readonly onEvent: (e: SpanEvent) => void = () => {},
+    private _handler?: (event: SpanEvent) => void,
   ) {}
+
+  private get handler(): (event: SpanEvent) => void {
+    return this._handler ?? defaultEventHandler;
+  }
 
   /** Bracket a cache operation with session-level start/end spans (no host, no parent). */
   private async span<T>(
@@ -63,10 +72,10 @@ export class Cache {
     fn: () => Promise<readonly [T, { bytes?: number }]>,
   ): Promise<T> {
     const start = Date.now();
-    this.onEvent({ kind, name, host: "", phase: "start", at: start });
+    this.handler({ kind, name, host: "", phase: "start", at: start });
     try {
       const [value, extra] = await fn();
-      this.onEvent({
+      this.handler({
         kind,
         name,
         host: "",
@@ -78,7 +87,7 @@ export class Cache {
       });
       return value;
     } catch (e) {
-      this.onEvent({
+      this.handler({
         kind,
         name,
         host: "",
@@ -152,7 +161,9 @@ export class Cache {
     if (existsSync(dest)) return readFile(dest, "utf8");
 
     return this.span("payload", spec.fqcn, async () => {
-      await Promise.all(spec.sources.map((s) => this.ensureArtifact(s.artifact)));
+      await Promise.all(
+        spec.sources.map((s) => this.ensureArtifact(s.artifact)),
+      );
 
       const entries: Record<string, Uint8Array> = {};
       for (const { artifact, files } of spec.sources)
@@ -160,7 +171,8 @@ export class Cache {
           entries[canonicalName(artifact, file)] = new Uint8Array(
             await this.readFile(artifact, file),
           );
-      for (const { path: p, content } of spec.scaffold) entries[p] = utf8(content);
+      for (const { path: p, content } of spec.scaffold)
+        entries[p] = utf8(content);
       const empty = new Uint8Array();
       for (const p of spec.markers) entries[p] = empty;
       const zip = zipSync(entries, { level: 6 });

@@ -1,12 +1,22 @@
-import { SpanEndEvent, SpanEvent } from "src/span.ts";
+import {
+  EventHandler,
+  setEventHandler,
+  SpanEndEvent,
+  SpanEvent,
+} from "./events.ts";
+import { env } from "src/core/config.ts";
 
-export type LogLevel = "trace" | "debug" | "info" | "warn" | "error";
+const logLevels = { trace: 0, debug: 1, info: 2, warn: 3, error: 4 } as const;
+
+export type LogLevel = keyof typeof logLevels;
+
+export const LOG_LEVEL: LogLevel =
+  (Object.keys(logLevels).find((k) => k === env("LOG_LEVEL")) as LogLevel) ??
+  "info";
 
 export interface Logger {
   log(level: LogLevel, message: string, fields?: Record<string, unknown>): void;
 }
-
-export type EventHandler = (event: SpanEvent) => void;
 
 export class LogReporter {
   constructor(private logger: Logger) {}
@@ -72,7 +82,7 @@ export class LogReporter {
       ms: e.ms,
       ...(e.error && { error: e.error }),
     };
-    const message = `${e.host} ${e.name} ${e.status} (${e.ms}ms)`;
+    const message = `${e.host}  ${e.name} ${e.status} (${e.ms}ms)`;
     switch (e.status) {
       case "ok":
       case "changed":
@@ -106,4 +116,8 @@ export function withLevel(inner: Logger, min: LogLevel): Logger {
 
 export function logReporter(logger: Logger): EventHandler {
   return new LogReporter(logger).report;
+}
+
+export function setLogger(l: Logger) {
+  setEventHandler(logReporter(l));
 }
