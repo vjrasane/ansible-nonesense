@@ -12,13 +12,17 @@
       "types": "./dist/builtin/index.d.ts",
       "default": "./dist/builtin/index.js"
     },
+    "./posix": {
+      "types": "./dist/posix/index.d.ts",
+      "default": "./dist/posix/index.js"
+    },
     "./community-general": {
       "types": "./dist/community-general/index.d.ts",
       "default": "./dist/community-general/index.js"
     },
-    "./posix": {
-      "types": "./dist/posix/index.d.ts",
-      "default": "./dist/posix/index.js"
+    "./community-docker": {
+      "types": "./dist/community-docker/index.d.ts",
+      "default": "./dist/community-docker/index.js"
     }
   },
   "files": [
