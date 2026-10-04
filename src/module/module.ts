@@ -1,3 +1,4 @@
+import { BecomeOpts } from "src/core/connection.ts";
 import { currentRunner, withOptions, withSpan } from "src/core/context.ts";
 import { isFatal } from "src/core/errors.ts";
 
@@ -52,7 +53,7 @@ export interface ModuleExecOpts {
   check?: boolean;
   diff?: boolean;
   noLog?: boolean;
-  become?: boolean;
+  become?: boolean | BecomeOpts;
   env?: Record<string, string>;
   ignoreErrors?: boolean;
 }

@@ -7,6 +7,7 @@ import { once } from "node:events";
 import { pipeline } from "node:stream/promises";
 import type { Readable, Writable } from "node:stream";
 import { packageName } from "./config.ts";
+import { shquote, shquoteArgv } from "src/utils.ts";
 
 export interface ExecResult {
   stdout: Buffer;
@@ -24,13 +25,48 @@ export interface ExecOpts {
   stdin?: Buffer;
   env?: Record<string, string>;
   timeout?: number;
-  become?: boolean;
+  become?: boolean | BecomeOpts;
 }
+
+export interface SudoBecomeOpts {
+  mode?: "sudo";
+  user?: string;
+  password?: string;
+}
+
+export interface SuBecomeOpts {
+  mode: "su";
+  user?: string;
+}
+
+export type BecomeOpts = SudoBecomeOpts | SuBecomeOpts;
 
 // Escalation is a launch-layer concern: wrap the command with sudo. `-n` keeps it
 // non-interactive so it never prompts on the stdin we may be piping a payload to.
-export const becomeArgv = (argv: string[], opts: ExecOpts): string[] =>
-  opts.become ? ["sudo", "-H", "-n", ...argv] : argv;
+export const becomeArgv = (argv: string[], opts: ExecOpts): string[] => {
+  if (!opts.become) return argv;
+  const become = typeof opts.become === "object" ? opts.become : {};
+
+  if (become.mode === "su") {
+    return ["su", become.user ?? "root", "-c", shquoteArgv(argv)];
+  }
+
+  const base = ["sudo", "-H"];
+  if (become.password) base.push("-S", "-k", "-p", "");
+  else base.push("-n");
+  if (become.user) base.push("-u", become.user);
+  return [...base, ...argv];
+};
+
+export const becomeStdin = (opts: ExecOpts): Buffer | undefined => {
+  if (!opts.become) return opts.stdin;
+  const become = typeof opts.become === "object" ? opts.become : {};
+  const pass = become.mode !== "su" ? become.password : undefined;
+  if (!pass) return opts.stdin;
+  const b = Buffer.from(pass + "\n");
+  if (!opts.stdin) return b;
+  return Buffer.concat([b, opts.stdin]);
+};
 
 export interface Connection {
   exec(argv: string[], opts?: ExecOpts): Promise<ExecResult>;
@@ -41,8 +77,6 @@ export interface Connection {
   close(): Promise<void>;
 }
 
-const shquote = (s: string) => `'${s.replaceAll("'", `'\\''`)}'`;
-
 abstract class AbstractConnection implements Connection {
   protected abstract spawn(argv: string[], opts?: ExecOpts): ProcHandle;
   abstract close(): Promise<void>;
@@ -51,7 +85,8 @@ abstract class AbstractConnection implements Connection {
     const p = this.spawn(becomeArgv(argv, opts), opts);
     const out: Buffer[] = [];
     p.stdout.on("data", (c) => out.push(c));
-    if (opts.stdin) p.stdin.write(opts.stdin);
+    const stdin = becomeStdin(opts);
+    if (stdin) p.stdin.write(stdin);
     p.stdin.end();
     const { rc, stderr } = await p.result;
     return { rc, stdout: Buffer.concat(out), stderr };
@@ -163,9 +198,11 @@ export class SSHConnection extends AbstractConnection {
   }
 
   protected spawn(argv: string[], opts?: ExecOpts) {
-    return spawnStream("ssh", this.sshArgv(argv.map(shquote).join(" ")), {
-      timeout: opts?.timeout,
-    });
+    return spawnStream(
+      "ssh",
+      [...this.controlArgs, this.target, shquoteArgv(argv)],
+      { timeout: opts?.timeout },
+    );
   }
 
   async close() {
@@ -190,9 +227,5 @@ export class SSHConnection extends AbstractConnection {
       ...(this.cfg.port ? ["-p", String(this.cfg.port)] : []),
       ...(this.cfg.identityFile ? ["-i", this.cfg.identityFile] : []),
     ];
-  }
-
-  private sshArgv(remoteCmd: string): string[] {
-    return [...this.controlArgs, this.target, remoteCmd];
   }
 }

@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { Host, type HostRef, execPythonOnHost } from "./host.ts";
 import { currentHost } from "../index.ts";
-import { becomeArgv } from "./connection.ts";
+import { becomeArgv, becomeStdin } from "./connection.ts";
 import type { Connection, ExecOpts, ExecResult } from "./connection.ts";
 
 const INTERP = "command -v python3 || command -v python";
@@ -60,17 +60,54 @@ describe("currentHost()", () => {
 });
 
 describe("become escalation", () => {
-  test("becomeArgv prefixes sudo -H -n when become", () => {
-    expect(becomeArgv(["/usr/bin/python3"], { become: true })).toEqual([
+  test("become: true → passwordless sudo (root by default)", () => {
+    expect(becomeArgv(["py"], { become: true })).toEqual([
       "sudo",
       "-H",
       "-n",
-      "/usr/bin/python3",
+      "py",
     ]);
   });
 
-  test("becomeArgv is a passthrough without become", () => {
-    expect(becomeArgv(["/usr/bin/python3"], {})).toEqual(["/usr/bin/python3"]);
+  test("passthrough without become", () => {
+    expect(becomeArgv(["py"], {})).toEqual(["py"]);
+    expect(becomeStdin({ stdin: Buffer.from("x") })?.toString()).toBe("x");
+  });
+
+  test("sudo to a specific user", () => {
+    expect(becomeArgv(["py"], { become: { user: "deploy" } })).toEqual([
+      "sudo",
+      "-H",
+      "-n",
+      "-u",
+      "deploy",
+      "py",
+    ]);
+  });
+
+  test("sudo with password uses -S and prepends it to stdin", () => {
+    const opts: ExecOpts = {
+      become: { password: "pw" },
+      stdin: Buffer.from("payload"),
+    };
+    expect(becomeArgv(["py"], opts)).toEqual([
+      "sudo",
+      "-H",
+      "-S",
+      "-k",
+      "-p",
+      "",
+      "py",
+    ]);
+    expect(becomeStdin(opts)?.toString()).toBe("pw\npayload");
+  });
+
+  test("su mode wraps in su -c for the user", () => {
+    const argv = becomeArgv(["py", "-c", "print(1)"], {
+      become: { mode: "su", user: "deploy" },
+    });
+    expect(argv.slice(0, 3)).toEqual(["su", "deploy", "-c"]);
+    expect(argv[3]).toContain("print(1)");
   });
 
   test("execPythonOnHost forwards become to connection.exec", async () => {
