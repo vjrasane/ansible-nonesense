@@ -19,12 +19,13 @@ def main():
                 break
             if msg.get("type") != "run_action":
                 continue
+            msg_id = msg.get("id")
             try:
                 result = run_action(sock, msg)
-                send_frame(sock, {"type": "result", "id": msg["id"], "ok": True, "result": result})
+                send_frame(sock, {"type": "result", "id": msg_id, "ok": True, "result": result})
             except Exception as exc:  # noqa: BLE001 — surface any plugin failure as a frame
                 send_frame(sock, {
-                    "type": "result", "id": msg["id"], "ok": False,
+                    "type": "result", "id": msg_id, "ok": False,
                     "error": str(exc), "traceback": traceback.format_exc(),
                 })
     finally:

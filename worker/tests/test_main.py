@@ -54,6 +54,21 @@ def test_two_sequential_run_actions_reuse_worker():
     assert [r["id"] for r in results] == [1, 2]
 
 
+def test_run_action_missing_id_survives():
+    with tempfile.TemporaryDirectory() as d:
+        sock_path = os.path.join(d, "w.sock")
+        msgs = [
+            {"type": "run_action", "plugin": "ansible.builtin.package",  # no "id"
+             "args": {"name": "git", "state": "present"}, "vars": {"ansible_facts": {}}},
+            {"type": "run_action", "id": 2, "plugin": "ansible.builtin.package",
+             "args": {"name": "curl", "state": "present"}, "vars": {"ansible_facts": {}}},
+        ]
+        results = _run_worker(sock_path, msgs)
+    assert len(results) == 2
+    assert results[0]["ok"] is True and results[0].get("id") is None
+    assert results[1]["ok"] is True  # worker survived the id-less frame
+
+
 def test_unknown_plugin_yields_error_result_and_survives():
     with tempfile.TemporaryDirectory() as d:
         sock_path = os.path.join(d, "w.sock")
