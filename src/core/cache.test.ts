@@ -10,7 +10,7 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { unzipSync } from "fflate";
-import { Cache, type Artifact, type PayloadSpec } from "../cache.tshe.ts";
+import { Cache, type Artifact, type PayloadSpec } from "./cache.ts";
 
 const core: Artifact = {
   id: "ansible-core@2.17.14",
