@@ -457,12 +457,40 @@ Non-negotiables around the script:
   passes `--version`, and step 4 installs exactly that. Pinning the script version
   pins the server — no "latest," no separate handshake required (a cheap
   connect-time version echo is an optional guard, not core).
-- **venv location, versioned.** A per-user cache dir
-  (`XDG_CACHE_HOME`/platform cache), path keyed by server version, so an upgrade
-  builds a fresh venv rather than mutating a live one.
+- **venv location, versioned.** The venv is **installed runtime, not throwaway
+  cache** — a cache reaper wiping it breaks the next spawn until a full
+  re-bootstrap (network fetch of ansible-core + pip install) — so it lives under
+  `XDG_DATA_HOME` (**not** `XDG_CACHE_HOME`), path keyed by server version, so an
+  upgrade builds a fresh venv rather than mutating a live one. See the layout below.
 - **Concurrency.** The venv is per-user and shared across client processes (each
   owns its *server*, not the *venv*); hold a lock (`flock` on the venv dir) so
   concurrent first-runs serialize. Steps 2–4 are idempotent under it.
+
+**On-disk layout.** Two trees, split by lifecycle: the venv is re-creatable but
+expensive and **version-keyed**; collections are cheap, re-fetchable, and
+**content-addressed**, so they are shared across server versions and safe to purge.
+Nesting the venv under `~/.cache` (one base dir) is rejected for exactly this
+mismatch — a cache cleaner may delete `XDG_CACHE_HOME` contents at any time without
+data loss, which is true for collections and false for the venv.
+
+```
+~/.local/share/ansible-jsonrpc-server/     # XDG_DATA_HOME — installed, survives cache purge
+└── venv/<server-version>/                 # one venv per pinned version (coexist)
+    ├── bin/python, pip, ansible-core + deps
+    └── .lock                              # flock: first-run bootstrap guard
+
+~/.cache/ansible-jsonrpc-server/           # XDG_CACHE_HOME — re-fetchable, safe to purge
+└── collections/<collection>/<version>-<hash>/   # content-addressed; shared across venv versions
+
+~/.local/state/ansible-jsonrpc-server/     # XDG_STATE_HOME — logs/locks, if any
+```
+
+- **Isolate ansible's own dirs.** The server points `ANSIBLE_HOME`, the collections
+  path, and local/remote tmp at its own tree, so it never pollutes or collides with
+  a real `~/.ansible` the user may already have — it stays self-contained.
+- **One explicit override.** Honor the `XDG_*` vars; also accept
+  `ANSIBLE_JSONRPC_SERVER_HOME` to relocate the whole tree at once (CI, sandboxes,
+  read-only homes).
 
 `ansible-core` is **fetched, never shipped** by the client (step 4 from PyPI) —
 the licensing firewall (§9) holds.
@@ -492,7 +520,10 @@ field, §4.5); the server then:
 Transitive collection dependencies are resolved **at codegen** (the artifact set
 a module needs is its closure), so the server never does dependency resolution —
 it only fetches exactly the pinned artifacts it is handed. Collections live on a
-collections path, never in `site-packages`.
+**content-addressed collections path under `XDG_CACHE_HOME`** (the layout in §4.8),
+never in `site-packages`. Keyed by `(collection, version, hash)` rather than server
+version, one extracted copy is **shared across server/venv versions** and is safe
+for a cache reaper to purge — re-fetched by hash on next use.
 
 ### 4.9 Concurrency: a process-per-task pool
 
