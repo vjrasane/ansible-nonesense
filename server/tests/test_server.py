@@ -1,7 +1,7 @@
 import io
 import sys
-from sensible_server.protocol import read_message, write_message
-from sensible_server.server import serve
+from ansible_jsonrpc_server.protocol import read_message, write_message
+from ansible_jsonrpc_server.server import serve
 
 LOCAL = {"connection": {"type": "local", "vars": {}}, "become": {}}
 VARS = {"ansible_python_interpreter": sys.executable}

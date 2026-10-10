@@ -1,5 +1,5 @@
 import io
-from sensible_server.protocol import read_message, write_message
+from ansible_jsonrpc_server.protocol import read_message, write_message
 
 
 def _pipe(obj):

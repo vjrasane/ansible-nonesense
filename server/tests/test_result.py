@@ -1,4 +1,4 @@
-from sensible_server.result import shape_result, status_from_exception
+from ansible_jsonrpc_server.result import shape_result, status_from_exception
 from ansible.errors import AnsibleConnectionFailure, AnsibleActionFail
 
 

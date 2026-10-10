@@ -440,11 +440,11 @@ The script (`bootstrap/vN/bootstrap.sh`):
    itself is missing, error "install python3-venv").
 3. **Bootstrap pip** — if `$VENV` has no pip, run a pinned `get-pip.py` (from its
    own versioned stable URL) with the venv python.
-4. **Install the server** — if `sensible-server` is absent, `$VENV/bin/pip
-   install sensible-server==$VERSION`, which pulls `ansible-core` and its
+4. **Install the server** — if `ansible-jsonrpc-server` is absent, `$VENV/bin/pip
+   install ansible-jsonrpc-server==$VERSION`, which pulls `ansible-core` and its
    controller deps. `$VERSION` is fixed by **which script the client ran**
    (`bootstrap/vN/…`, matched to a server version) or passed as `--version`.
-5. Done — the client spawns `$VENV/bin/python -m sensible_server`.
+5. Done — the client spawns `$VENV/bin/python -m ansible_jsonrpc_server`.
 
 Non-negotiables around the script:
 

@@ -1,5 +1,5 @@
 import sys
-from sensible_server.harness import run_action
+from ansible_jsonrpc_server.harness import run_action
 
 LOCAL = {"connection": {"type": "local", "vars": {}}, "become": {}}
 VARS = {"ansible_python_interpreter": sys.executable}

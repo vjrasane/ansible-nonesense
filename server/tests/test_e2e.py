@@ -1,6 +1,6 @@
 import subprocess
 import sys
-from sensible_server.protocol import read_message, write_message
+from ansible_jsonrpc_server.protocol import read_message, write_message
 
 LOCAL = {"connection": {"type": "local", "vars": {}}, "become": {}}
 VARS = {"ansible_python_interpreter": sys.executable}
@@ -8,7 +8,7 @@ VARS = {"ansible_python_interpreter": sys.executable}
 
 def test_spawned_server_runs_ping_and_stray_print_does_not_corrupt():
     proc = subprocess.Popen(
-        [sys.executable, "-m", "sensible_server"],
+        [sys.executable, "-m", "ansible_jsonrpc_server"],
         stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
     )
     try:

@@ -14,13 +14,13 @@
 
 ## Global Constraints
 
-- Python floor `>=3.11`; `ansible-core==2.19.13`; package `sensible_server` under `server/` (already renamed).
+- Python floor `>=3.11`; `ansible-core==2.19.13`; package `ansible_jsonrpc_server` under `server/` (already renamed).
 - Wire = **JSON-RPC 2.0 + `Content-Length` framing** over stdio. The server **redirects its own `sys.stdout` to stderr at startup** and writes the protocol on a saved fd, so stray `print()` can't corrupt frames.
 - `init_plugin_loader()` must run **before** any loader use.
 - Connection config + credentials go through `connection.set_options(var_options=<ansible var bag>)`, **not** `PlayContext`. The server forwards the var bag **without interpreting it** (connection-agnostic).
 - Result `status` ∈ `ok | failed | unreachable | skipped` (this plan; `timed_out`/`cancelled` arrive in Plan 5). A **harness/protocol failure** (couldn't produce a result) is returned as a **JSON-RPC `error` object**, which is the spec's `status: error`.
 - `no_log` redaction uses ansible's own sentinel `VALUE_SPECIFIED_IN_NO_LOG_PARAMETER`.
-- Deferred this plan (leave `server/sensible_server/connection.py` and `rpc.py` in place, unused): delegate connection, server→client callbacks, fork pool, facts, collections, lifecycle, bootstrap.
+- Deferred this plan (leave `server/ansible_jsonrpc_server/connection.py` and `rpc.py` in place, unused): delegate connection, server→client callbacks, fork pool, facts, collections, lifecycle, bootstrap.
 
 ## Review Focus
 
@@ -35,7 +35,7 @@
 ### Task 1: JSON-RPC + Content-Length codec
 
 **Files:**
-- Rewrite: `server/sensible_server/protocol.py`
+- Rewrite: `server/ansible_jsonrpc_server/protocol.py`
 - Rewrite test: `server/tests/test_protocol.py`
 
 **Interfaces:**
@@ -46,7 +46,7 @@
 `server/tests/test_protocol.py` (replace the whole file):
 ```python
 import io
-from sensible_server.protocol import read_message, write_message
+from ansible_jsonrpc_server.protocol import read_message, write_message
 
 
 def _pipe(obj):
@@ -80,7 +80,7 @@ Expected: FAIL — `ImportError: cannot import name 'read_message'`
 
 - [ ] **Step 3: Implement the codec**
 
-`server/sensible_server/protocol.py` (replace the whole file):
+`server/ansible_jsonrpc_server/protocol.py` (replace the whole file):
 ```python
 import json
 
@@ -151,7 +151,7 @@ jj commit server/ -m "refactor(server): JSON-RPC Content-Length codec (replaces 
 ### Task 2: Context builder with flags + real connection
 
 **Files:**
-- Rewrite: `server/sensible_server/context.py`
+- Rewrite: `server/ansible_jsonrpc_server/context.py`
 - Rewrite test: `server/tests/test_context.py`
 
 **Interfaces:**
@@ -163,7 +163,7 @@ jj commit server/ -m "refactor(server): JSON-RPC Content-Length codec (replaces 
 `server/tests/test_context.py` (replace the whole file):
 ```python
 import sys
-from sensible_server.context import build_execution
+from ansible_jsonrpc_server.context import build_execution
 
 HOST = {"connection": {"type": "local", "vars": {}}, "become": {}}
 
@@ -202,7 +202,7 @@ Expected: FAIL — `ImportError: cannot import name 'build_execution'`
 
 - [ ] **Step 3: Implement the builder**
 
-`server/sensible_server/context.py` (replace the whole file):
+`server/ansible_jsonrpc_server/context.py` (replace the whole file):
 ```python
 import ansible.plugins.loader as loader
 from ansible.parsing.dataloader import DataLoader
@@ -263,7 +263,7 @@ jj commit server/ -m "feat(server): context builder with flags + real connection
 ### Task 3: Result shaping
 
 **Files:**
-- Create: `server/sensible_server/result.py`
+- Create: `server/ansible_jsonrpc_server/result.py`
 - Test: `server/tests/test_result.py`
 
 **Interfaces:**
@@ -273,7 +273,7 @@ jj commit server/ -m "feat(server): context builder with flags + real connection
 
 `server/tests/test_result.py`:
 ```python
-from sensible_server.result import shape_result, status_from_exception
+from ansible_jsonrpc_server.result import shape_result, status_from_exception
 from ansible.errors import AnsibleConnectionFailure, AnsibleActionFail
 
 
@@ -317,11 +317,11 @@ def test_exception_mapping():
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `cd server && python -m pytest tests/test_result.py -v`
-Expected: FAIL — `ModuleNotFoundError: No module named 'sensible_server.result'`
+Expected: FAIL — `ModuleNotFoundError: No module named 'ansible_jsonrpc_server.result'`
 
 - [ ] **Step 3: Implement result shaping**
 
-`server/sensible_server/result.py`:
+`server/ansible_jsonrpc_server/result.py`:
 ```python
 from ansible.errors import AnsibleConnectionFailure, AnsibleActionSkip, AnsibleActionFail
 from ansible._internal._errors import _error_utils
@@ -381,7 +381,7 @@ jj commit server/ -m "feat(server): result shaping (status/changed/warnings, no_
 ### Task 4: Native runAction handler
 
 **Files:**
-- Rewrite: `server/sensible_server/harness.py`
+- Rewrite: `server/ansible_jsonrpc_server/harness.py`
 - Rewrite test: `server/tests/test_harness.py`
 
 **Interfaces:**
@@ -393,7 +393,7 @@ jj commit server/ -m "feat(server): result shaping (status/changed/warnings, no_
 `server/tests/test_harness.py` (replace the whole file):
 ```python
 import sys
-from sensible_server.harness import run_action
+from ansible_jsonrpc_server.harness import run_action
 
 LOCAL = {"connection": {"type": "local", "vars": {}}, "become": {}}
 VARS = {"ansible_python_interpreter": sys.executable}
@@ -434,7 +434,7 @@ Expected: FAIL — `run_action` signature/behavior differs (old `run_action(sock
 
 - [ ] **Step 3: Implement the handler**
 
-`server/sensible_server/harness.py` (replace the whole file):
+`server/ansible_jsonrpc_server/harness.py` (replace the whole file):
 ```python
 from ansible.errors import AnsibleError
 from .context import build_execution
@@ -474,8 +474,8 @@ jj commit server/ -m "feat(server): native runAction handler (real _execute_modu
 ### Task 5: JSON-RPC stdio server loop
 
 **Files:**
-- Rewrite: `server/sensible_server/__main__.py`
-- Create: `server/sensible_server/server.py`
+- Rewrite: `server/ansible_jsonrpc_server/__main__.py`
+- Create: `server/ansible_jsonrpc_server/server.py`
 - Test: `server/tests/test_server.py`
 
 **Interfaces:**
@@ -488,8 +488,8 @@ jj commit server/ -m "feat(server): native runAction handler (real _execute_modu
 ```python
 import io
 import sys
-from sensible_server.protocol import read_message, write_message
-from sensible_server.server import serve
+from ansible_jsonrpc_server.protocol import read_message, write_message
+from ansible_jsonrpc_server.server import serve
 
 LOCAL = {"connection": {"type": "local", "vars": {}}, "become": {}}
 VARS = {"ansible_python_interpreter": sys.executable}
@@ -539,11 +539,11 @@ def test_unknown_method_is_jsonrpc_error_and_survives():
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `cd server && python -m pytest tests/test_server.py -v`
-Expected: FAIL — `ModuleNotFoundError: No module named 'sensible_server.server'`
+Expected: FAIL — `ModuleNotFoundError: No module named 'ansible_jsonrpc_server.server'`
 
 - [ ] **Step 3: Implement the server loop**
 
-`server/sensible_server/server.py`:
+`server/ansible_jsonrpc_server/server.py`:
 ```python
 import traceback
 from .protocol import read_message, write_message
@@ -579,7 +579,7 @@ def _error(out_stream, req_id, code, message, data=None):
     write_message(out_stream, {"jsonrpc": "2.0", "id": req_id, "error": err})
 ```
 
-`server/sensible_server/__main__.py` (replace the whole file):
+`server/ansible_jsonrpc_server/__main__.py` (replace the whole file):
 ```python
 import os
 import sys
@@ -618,10 +618,10 @@ jj commit server/ -m "feat(server): JSON-RPC stdio serve loop + stdout-protected
 
 **Files:**
 - Create: `server/tests/test_e2e.py`
-- Modify: `server/sensible_server/connection.py:1` and `server/sensible_server/rpc.py:1` (prepend a deferred-note comment; they are unused this plan)
+- Modify: `server/ansible_jsonrpc_server/connection.py:1` and `server/ansible_jsonrpc_server/rpc.py:1` (prepend a deferred-note comment; they are unused this plan)
 
 **Interfaces:**
-- Consumes: the running `python -m sensible_server` process; `read_message`/`write_message`.
+- Consumes: the running `python -m ansible_jsonrpc_server` process; `read_message`/`write_message`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -629,7 +629,7 @@ jj commit server/ -m "feat(server): JSON-RPC stdio serve loop + stdout-protected
 ```python
 import subprocess
 import sys
-from sensible_server.protocol import read_message, write_message
+from ansible_jsonrpc_server.protocol import read_message, write_message
 
 LOCAL = {"connection": {"type": "local", "vars": {}}, "become": {}}
 VARS = {"ansible_python_interpreter": sys.executable}
@@ -637,7 +637,7 @@ VARS = {"ansible_python_interpreter": sys.executable}
 
 def test_spawned_server_runs_ping_and_stray_print_does_not_corrupt():
     proc = subprocess.Popen(
-        [sys.executable, "-m", "sensible_server"],
+        [sys.executable, "-m", "ansible_jsonrpc_server"],
         stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
     )
     try:
@@ -664,18 +664,18 @@ Expected: FAIL — collection error until the file exists; then it drives the re
 
 - [ ] **Step 3: Add the deferred notes (no logic change)**
 
-Prepend to `server/sensible_server/connection.py`:
+Prepend to `server/ansible_jsonrpc_server/connection.py`:
 ```python
 # DEFERRED (Plan: delegate connection). Unused in native execution; retained for
 # the future delegate transport (server→client exec/put/fetch). See
 # docs/design-action-plugin-harness.md §4.4.
 ```
-Prepend the same style note to `server/sensible_server/rpc.py` (delegate callbacks only).
+Prepend the same style note to `server/ansible_jsonrpc_server/rpc.py` (delegate callbacks only).
 
 - [ ] **Step 4: Run test + full suite to verify pass**
 
 Run: `cd server && timeout 90 python -m pytest -v`
-Expected: PASS (all tasks' tests green; the e2e drives a spawned `python -m sensible_server`).
+Expected: PASS (all tasks' tests green; the e2e drives a spawned `python -m ansible_jsonrpc_server`).
 
 - [ ] **Step 5: Commit**
 

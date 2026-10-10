@@ -1,5 +1,5 @@
 import sys
-from sensible_server.context import build_execution
+from ansible_jsonrpc_server.context import build_execution
 
 HOST = {"connection": {"type": "local", "vars": {}}, "become": {}}
 

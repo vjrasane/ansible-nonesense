@@ -7,7 +7,7 @@ from ansible.plugins.connection import ConnectionBase
 
 
 class ShimConnection(ConnectionBase):
-    transport = "sensible_shim"
+    transport = "jsonrpc_delegate"
     has_pipelining = False
 
     def __init__(self, play_context, rpc):
