@@ -1,9 +1,14 @@
 from ansible.errors import AnsibleConnectionFailure, AnsibleActionSkip, AnsibleActionFail
 from ansible._internal._errors import _error_utils
 
-_REDACTED = "VALUE_SPECIFIED_IN_NO_LOG_PARAMETER"
-_PRESERVE = {"changed", "failed", "unreachable", "skipped", "warnings",
-             "deprecations", "msg", "exception", "attempts", "retries"}
+# Mirrors ansible's task-level censor_result (executor/task_result.py): keep only
+# _PRESERVE, replace everything else with a single 'censored' note. Status flags and
+# changed are read off the raw dict *before* redaction, so narrowing _PRESERVE here
+# cannot change the frame-level status/changed. msg is intentionally NOT preserved.
+_PRESERVE = {"attempts", "changed", "retries", "_ansible_no_log", "exception",
+             "warnings", "deprecations"}
+_CENSORED = ("the output has been hidden due to the fact that 'no_log: true' "
+             "was specified for this result")
 
 
 def shape_result(raw, no_log):
@@ -25,7 +30,9 @@ def shape_result(raw, no_log):
 
 
 def _redact(raw):
-    return {k: (v if k in _PRESERVE else _REDACTED) for k, v in raw.items()}
+    censored = {k: raw[k] for k in _PRESERVE if k in raw}
+    censored["censored"] = _CENSORED
+    return censored
 
 
 def status_from_exception(exc):

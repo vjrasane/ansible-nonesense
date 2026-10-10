@@ -32,6 +32,19 @@ def test_no_log_redacts_result_values():
     assert out["changed"] is True            # preserved flags survive redaction
 
 
+def test_no_log_drops_msg_and_nested_like_ansible_censor():
+    # ansible's censor_result keeps only _PRESERVE + a 'censored' note; msg is NOT
+    # preserved, and modules routinely echo inputs into msg → must not leak.
+    out = shape_result(
+        {"changed": True, "msg": "token=hunter2", "data": {"inner": "hunter2"}},
+        no_log=True,
+    )
+    assert "hunter2" not in str(out["result"])      # msg + nested both gone
+    assert "msg" not in out["result"]
+    assert out["result"]["changed"] is True
+    assert "censored" in out["result"]
+
+
 def test_exception_mapping():
     status, raw = status_from_exception(AnsibleConnectionFailure("down"))
     assert status == "unreachable"
