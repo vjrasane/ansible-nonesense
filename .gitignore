@@ -11,4 +11,5 @@ inventory.yaml
 *.pyc
 *.md
 
+!docs/*.md
 !README.md
