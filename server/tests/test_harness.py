@@ -1,7 +1,7 @@
 import socket
 import threading
-from sensible_worker.protocol import send_frame, recv_frame
-from sensible_worker.harness import run_action
+from sensible_server.protocol import send_frame, recv_frame
+from sensible_server.harness import run_action
 
 RESPONSES = {
     "ansible.legacy.setup": {"ansible_facts": {"ansible_pkg_mgr": "apt"}},

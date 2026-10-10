@@ -1,7 +1,7 @@
 import socket
 import threading
-from sensible_worker.protocol import send_frame, recv_frame
-from sensible_worker.rpc import RpcClient
+from sensible_server.protocol import send_frame, recv_frame
+from sensible_server.rpc import RpcClient
 
 
 def _responder(sock, replies):

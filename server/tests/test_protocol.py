@@ -1,5 +1,5 @@
 import socket
-from sensible_worker.protocol import send_frame, recv_frame
+from sensible_server.protocol import send_frame, recv_frame
 
 
 def test_roundtrip_frame():

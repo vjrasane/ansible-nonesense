@@ -1,4 +1,4 @@
-from sensible_worker.context import build_context
+from sensible_server.context import build_context
 
 
 def test_context_builds_full_parent_chain():

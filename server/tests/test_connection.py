@@ -3,9 +3,9 @@ import socket
 import threading
 import ansible.plugins.loader as loader
 from ansible.playbook.play_context import PlayContext
-from sensible_worker.protocol import send_frame, recv_frame
-from sensible_worker.rpc import RpcClient
-from sensible_worker.connection import ShimConnection
+from sensible_server.protocol import send_frame, recv_frame
+from sensible_server.rpc import RpcClient
+from sensible_server.connection import ShimConnection
 
 
 def _serve_once(sock, reply):

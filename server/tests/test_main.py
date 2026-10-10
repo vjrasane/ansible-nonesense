@@ -3,7 +3,7 @@ import socket
 import subprocess
 import sys
 import tempfile
-from sensible_worker.protocol import send_frame, recv_frame
+from sensible_server.protocol import send_frame, recv_frame
 
 RESP = {
     "ansible.legacy.setup": {"ansible_facts": {"ansible_pkg_mgr": "apt"}},
@@ -16,7 +16,7 @@ def _run_worker(sock_path, run_actions):
     srv.bind(sock_path)
     srv.listen(1)
     srv.settimeout(15)
-    proc = subprocess.Popen([sys.executable, "-m", "sensible_worker", "--socket", sock_path])
+    proc = subprocess.Popen([sys.executable, "-m", "sensible_server", "--socket", sock_path])
     conn, _ = srv.accept()
     results = []
     for msg in run_actions:
