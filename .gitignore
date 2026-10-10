@@ -5,6 +5,7 @@ dist/
 .devenv/
 .devenv.flake.nix
 .direnv/
+.superpowers/
 devenv.lock
 inventory.yml
 inventory.yaml
