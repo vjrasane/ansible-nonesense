@@ -1,5 +1,9 @@
+# DEFERRED (Plan: delegate connection). Unused in native execution; retained as a
+# shape reference for the future delegate transport (server->client exec/put/fetch).
+# See docs/design-action-plugin-harness.md §4.4. The socket frame codec this relied on
+# (send_frame/recv_frame) was removed with the JSON-RPC migration; the delegate will be
+# rebuilt on the bidirectional JSON-RPC seam, so these calls are placeholders.
 import itertools
-from .protocol import send_frame, recv_frame
 
 
 class RpcClient:

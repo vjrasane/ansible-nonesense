@@ -1,3 +1,6 @@
+# DEFERRED (Plan: delegate connection). Unused in native execution; retained as a
+# shape reference for the future delegate transport (server->client exec/put/fetch).
+# See docs/design-action-plugin-harness.md §4.4.
 import base64
 import ansible.plugins.loader as loader
 from ansible.plugins.connection import ConnectionBase
