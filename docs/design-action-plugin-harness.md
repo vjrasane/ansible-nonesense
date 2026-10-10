@@ -323,6 +323,7 @@ Methods (`params` → `result` shapes are the typed messages):
 | `runAction` | client→server | `host:{id, connection:{type,vars}, become:{…ansible_become* vars}, gather_subset?}, fqcn, args, vars, artifact?:{collection,version,hash,url}, flags?:{check_mode,diff,no_log,verbosity,timeout}` | the `result` of §4.3.3: `status, changed, result, warnings, deprecations` |
 | `gatherFacts` | client→server | `host:{id, connection, gather_subset?}` | `ansible_facts` (backs `host.facts`, §4.7) |
 | `shutdown` | client→server (notification) | — | — |
+| `log/event`, `progress`, `connection/state` *(notifications, §4.5.1)* | server→client | `{level,message,…}` / `{token,phase,…}` / `{connectionId,phase,…}` — **no `id`** | — (no reply) |
 | `exec`/`put`/`fetch` *(deferred — delegate only, §4.4)* | server→client | op params | transport result |
 
 Correlation, interleaving, and cancellation are JSON-RPC's (`id`, `$/cancelRequest`
@@ -343,6 +344,56 @@ generated per language (JSON Schema / TypeSpec → `datamodel-code-generator`
 standardizes only the envelope; these typed shapes are ours (schema tool choice
 is the remaining §8 item). `vscode-jsonrpc`/most libs also support a socket
 carrier, so stdio→socket is a later swap, not a protocol change.
+
+#### 4.5.1 Server→client notifications (logs, progress, lifecycle)
+
+The server emits **internal events the client did not request** — cache warmups,
+collection fetches, connection open/close, pool lifecycle — so a binding can
+surface them (logs, progress bars) without the server choosing a logging format.
+These are **JSON-RPC notifications** (a message with **no `id`**; the recipient
+must not reply), which the libraries support symmetrically (`sendNotification` /
+`onNotification` in `vscode-jsonrpc`; `Notify` / `req.Notif` in
+`sourcegraph/jsonrpc2`). This is the mechanism LSP uses for `window/logMessage`,
+`$/progress`, and `telemetry/event`; reusing those shapes means existing client
+tooling understands them.
+
+**Correlating a stream of events.** The JSON-RPC `id` matches *one request to its
+one response* — it is not, and never was, how a series of pushed events is tied
+together. Correlation is a **domain key carried in `params`**, exactly as
+`$/progress` carries a `token` across its begin/report/end frames. So the server
+mints a stable id and repeats it:
+
+```jsonc
+{"jsonrpc":"2.0","method":"connection/state",
+ "params":{"connectionId":"c17","phase":"open","host":"web1","transport":"ssh","ts":…}}
+// … later …
+{"jsonrpc":"2.0","method":"connection/state",
+ "params":{"connectionId":"c17","phase":"close","ts":…,"reason":"idle"}}
+```
+
+The client keys a map on `connectionId` to pair open with close (one method + a
+`phase` field, or two methods sharing the id — equivalent). The same token pattern
+covers any multi-phase event (warmup begin/end, fetch begin/end). Events may also
+carry the originating `runAction` request `id` so the client can attribute an event
+to a task.
+
+**Two architectural obligations** (enforced in §4.9):
+
+- **Single writer owns stdout.** Notifications and responses share one pipe and may
+  originate on different threads (a warmup thread plus the dispatch loop), so every
+  outbound frame goes through **one lock/queue** or frames interleave and corrupt.
+- **Children can't write the seam; the parent synthesizes terminal events.** Worker
+  children have stdout redirected to stderr (above), so child-side events are
+  **funneled to the parent**, which assigns globally-unique ids (e.g.
+  `<worker-pid>:<n>`) and writes them. Because a worker may be SIGKILLed
+  (timeout/cancel → process-group kill, §4.10) without ever sending a `close`, the
+  parent — which observes the worker's exit — **emits the terminal `close`/`end`
+  itself on reap**, so the client never leaks a forever-"open" id. Parent-side
+  events (warmup, collection fetch, pool lifecycle) emit directly, no funnel.
+
+Optional controls: a client-sent `setLogLevel` request lets the server filter
+server-side rather than flood the shared pipe; log `params` stay small, since
+chatty events on the same stream as results can delay a response.
 
 ### 4.6 Lifecycle and orphan-prevention
 
@@ -555,6 +606,17 @@ first cut every child is a **native-connection** job — it does its own SSH
 (sharing the `ControlMaster` socket via the filesystem) and returns a result, a
 pure pool job with no callbacks. (The deferred delegate connection, §4.4, would
 add a child→parent control pipe for `exec`/`put`/`fetch`; not needed now.)
+
+Because the parent is the **sole owner of the stdio seam**, it is also the **single
+writer** for the server→client notifications of §4.5.1: all outbound frames
+(responses *and* notifications, which may arise on the dispatch loop or a background
+thread like a cache warmup) pass through **one lock/queue** so they never interleave.
+Parent-side events (warmup, collection fetch, pool lifecycle) emit directly; any
+**child-side** event (e.g. per-connection lifecycle inside a worker) is **funneled to
+the parent** — children's stdout is redirected to stderr, so they cannot write the
+seam — and the parent assigns globally-unique correlation ids and, on observing a
+worker's exit (including a SIGKILL from §4.10), **synthesizes the terminal
+`close`/`end`** so no event stream is left dangling.
 
 ### 4.10 Timeouts and cancellation
 
