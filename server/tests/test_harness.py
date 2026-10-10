@@ -1,39 +1,33 @@
-import socket
-import threading
-from sensible_server.protocol import send_frame, recv_frame
+import sys
 from sensible_server.harness import run_action
 
-RESPONSES = {
-    "ansible.legacy.setup": {"ansible_facts": {"ansible_pkg_mgr": "apt"}},
-    "ansible.legacy.apt": {"changed": True},
-}
+LOCAL = {"connection": {"type": "local", "vars": {}}, "become": {}}
+VARS = {"ansible_python_interpreter": sys.executable}
 
 
-def _fake_server(sock, seen):
-    while True:
-        req = recv_frame(sock)
-        if req is None:
-            return
-        if req["op"] == "run_module":
-            name = req["params"]["name"]
-            seen.append(name)
-            result = RESPONSES.get(name, {"changed": False})
-        else:
-            result = {"rc": 0, "stdout": "", "stderr": ""}
-        send_frame(sock, {"type": "response", "id": req["id"], "ok": True, "result": result})
+def _params(fqcn, args, flags=None):
+    return {"host": LOCAL, "fqcn": fqcn, "args": args, "vars": VARS, "flags": flags or {}}
 
 
-def test_package_drives_setup_then_apt():
-    worker_sock, server_sock = socket.socketpair()
-    seen = []
-    threading.Thread(target=_fake_server, args=(server_sock, seen), daemon=True).start()
-    msg = {
-        "plugin": "ansible.builtin.package",
-        "args": {"name": "git", "state": "present"},
-        "vars": {"ansible_facts": {}},
-    }
-    result = run_action(worker_sock, msg)
-    worker_sock.close()
-    assert result.get("changed") is True
-    # Review Focus: ansible.legacy.* names forwarded verbatim, in order.
-    assert seen == ["ansible.legacy.setup", "ansible.legacy.apt"]
+def test_ping_ok():
+    out = run_action(_params("ansible.builtin.ping", {}))
+    assert out["status"] == "ok"
+    assert out["result"]["ping"] == "pong"
+
+
+def test_command_changed_and_stdout():
+    out = run_action(_params("ansible.builtin.command", {"_raw_params": "echo hi"}))
+    assert out["status"] == "ok" and out["changed"] is True
+    assert out["result"]["stdout"] == "hi"
+
+
+def test_failing_command_is_failed_not_exception():
+    out = run_action(_params("ansible.builtin.command", {"_raw_params": "false"}))
+    assert out["status"] == "failed"
+    assert out["result"].get("rc") == 1
+
+
+def test_no_log_redacts():
+    out = run_action(_params("ansible.builtin.command",
+                             {"_raw_params": "echo secret"}, flags={"no_log": True}))
+    assert "secret" not in str(out["result"])

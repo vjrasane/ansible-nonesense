@@ -1,23 +1,20 @@
-import types
-import ansible.plugins.loader as loader
-from .context import build_context
-from .connection import ShimConnection
-from .rpc import RpcClient
+from ansible.errors import AnsibleError
+from .context import build_execution
+from .result import shape_result, status_from_exception
 
 
-def run_action(sock, msg):
-    rpc = RpcClient(sock)
-
-    def _execute_module(self, module_name=None, module_args=None, task_vars=None, **kwargs):
-        return rpc.call("run_module", {"name": module_name, "args": module_args or {}})
-
-    task, play_context, dl, templar = build_context(msg["plugin"], msg["args"], msg["vars"])
-    cls = loader.action_loader.get(msg["plugin"], class_only=True)
-    if cls is None:
-        raise RuntimeError("no action plugin for %s" % msg["plugin"])
-    plugin = cls(
-        task, ShimConnection(play_context, rpc), play_context, dl, templar,
-        shared_loader_obj=loader,
+def run_action(params):
+    flags = params.get("flags") or {}
+    no_log = bool(flags.get("no_log", False))
+    plugin, task_vars = build_execution(
+        params["host"], params["fqcn"], params.get("args") or {},
+        params.get("vars") or {}, flags,
     )
-    plugin._execute_module = types.MethodType(_execute_module, plugin)
-    return plugin.run(task_vars=msg["vars"])
+    try:
+        raw = plugin.run(task_vars=task_vars)
+    except AnsibleError as exc:               # task-level failures: map, don't raise
+        status, raw = status_from_exception(exc)
+        shaped = shape_result(raw, no_log)
+        shaped["status"] = status
+        return shaped
+    return shape_result(raw, no_log)
