@@ -1,32 +1,51 @@
 import json
-import struct
 
-_HEADER = struct.Struct(">I")
+_HEADER_SEP = b"\r\n\r\n"
 
 
-def send_frame(sock, obj):
+def write_message(stream, obj):
     body = json.dumps(obj).encode("utf-8")
-    sock.sendall(_HEADER.pack(len(body)) + body)
+    stream.write(b"Content-Length: %d\r\n\r\n" % len(body))
+    stream.write(body)
+    stream.flush()
 
 
-def recv_frame(sock):
-    header = _recv_exactly(sock, _HEADER.size)
-    if header is None:
+def read_message(stream):
+    headers = _read_headers(stream)
+    if headers is None:
         return None
-    (length,) = _HEADER.unpack(header)
-    body = _recv_exactly(sock, length)
+    length = int(headers["content-length"])
+    body = _read_exactly(stream, length)
     if body is None:
-        raise ConnectionError("truncated frame body")
+        raise ConnectionError("truncated message body")
     return json.loads(body.decode("utf-8"))
 
 
-def _recv_exactly(sock, n):
+def _read_headers(stream):
+    buf = b""
+    while _HEADER_SEP not in buf:
+        chunk = stream.read(1)
+        if not chunk:
+            return None if not buf else _raise("truncated headers")
+        buf += chunk
+    headers = {}
+    for line in buf[: -len(_HEADER_SEP)].split(b"\r\n"):
+        if not line:
+            continue
+        k, _, v = line.partition(b":")
+        headers[k.decode().strip().lower()] = v.decode().strip()
+    return headers
+
+
+def _read_exactly(stream, n):
     buf = b""
     while len(buf) < n:
-        chunk = sock.recv(n - len(buf))
+        chunk = stream.read(n - len(buf))
         if not chunk:
-            if not buf:
-                return None
-            raise ConnectionError("truncated frame")
+            return None
         buf += chunk
     return buf
+
+
+def _raise(msg):
+    raise ConnectionError(msg)
