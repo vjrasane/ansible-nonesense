@@ -1,35 +1,17 @@
-import argparse
-import socket
-import traceback
-from .protocol import send_frame, recv_frame
-from .harness import run_action
+import os
+import sys
+from .server import serve
 
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--socket", required=True)
-    opts = parser.parse_args()
-
-    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    sock.connect(opts.socket)
-    try:
-        while True:
-            msg = recv_frame(sock)
-            if msg is None:
-                break
-            if msg.get("type") != "run_action":
-                continue
-            msg_id = msg.get("id")
-            try:
-                result = run_action(sock, msg)
-                send_frame(sock, {"type": "result", "id": msg_id, "ok": True, "result": result})
-            except Exception as exc:  # noqa: BLE001 — surface any plugin failure as a frame
-                send_frame(sock, {
-                    "type": "result", "id": msg_id, "ok": False,
-                    "error": str(exc), "traceback": traceback.format_exc(),
-                })
-    finally:
-        sock.close()
+    # Protect the protocol stream: keep stdin/stdout on private fds, point
+    # sys.stdout at stderr so stray prints can't corrupt frames.
+    in_fd = os.dup(sys.stdin.fileno())
+    out_fd = os.dup(sys.stdout.fileno())
+    sys.stdout = sys.stderr
+    with os.fdopen(in_fd, "rb", buffering=0) as in_stream, \
+            os.fdopen(out_fd, "wb", buffering=0) as out_stream:
+        serve(in_stream, out_stream)
 
 
 if __name__ == "__main__":
