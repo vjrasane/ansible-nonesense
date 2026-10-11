@@ -1,14 +1,17 @@
 import traceback
+import msgspec
 from .protocol import read_message, write_message
 
 
 def serve(in_stream, out_stream, handlers=None):
-    # `handlers` maps method name → (params) -> result. Default is the in-process
-    # harness (used by unit tests); the real server injects pool-backed handlers, so
-    # this module — and thus the parent — never imports ansible.
+    # `handlers` maps method name → (ParamType, (params) -> result). ParamType is the
+    # msgspec Struct the raw params are validated into at the seam. Default is the
+    # in-process harness (unit tests); the real server injects pool-backed handlers,
+    # so this module — and thus the parent — never imports ansible.
     if handlers is None:
         from .harness import run_action
-        handlers = {"runAction": lambda params: run_action(params)}
+        from .messages import RunParams
+        handlers = {"runAction": (RunParams, run_action)}
 
     while True:
         msg = read_message(in_stream)
@@ -18,12 +21,18 @@ def serve(in_stream, out_stream, handlers=None):
         if method == "shutdown":
             return
         req_id = msg.get("id")
-        handler = handlers.get(method)
-        if handler is None:
+        entry = handlers.get(method)
+        if entry is None:
             _error(out_stream, req_id, -32601, "method not found: %s" % method)
             continue
+        param_type, handler = entry
         try:
-            result = handler(msg.get("params") or {})
+            params = msgspec.convert(msg.get("params") or {}, param_type)
+        except msgspec.ValidationError as exc:
+            _error(out_stream, req_id, -32602, "invalid params: %s" % exc)
+            continue
+        try:
+            result = handler(params)
             write_message(out_stream, {"jsonrpc": "2.0", "id": req_id, "result": result})
         except Exception as exc:  # noqa: BLE001 — harness failure → JSON-RPC error
             _error(out_stream, req_id, -32000, str(exc), traceback.format_exc())

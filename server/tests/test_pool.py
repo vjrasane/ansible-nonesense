@@ -5,10 +5,11 @@ import sys
 import pytest
 
 from ansible_jsonrpc_server.pool import TaskPool
+from ansible_jsonrpc_server.messages import Connection, HostSpec, RunParams
 
-LOCAL = {"connection": {"type": "local", "vars": {}}, "become": {}}
-PING = {"host": LOCAL, "fqcn": "ansible.builtin.ping", "args": {},
-        "vars": {"ansible_python_interpreter": sys.executable}}
+PING = RunParams(host=HostSpec(connection=Connection(type="local")),
+                 fqcn="ansible.builtin.ping",
+                 vars={"ansible_python_interpreter": sys.executable})
 
 
 # --- probes run in the forked workers (module-level → picklable by reference) ---
@@ -36,8 +37,8 @@ def pool():
 
 def test_runs_module_through_pool(pool):
     res = pool.run_action(PING)
-    assert res["status"] == "ok"
-    assert res["result"]["ping"] == "pong"
+    assert res.status == "ok"
+    assert res.result["ping"] == "pong"
 
 
 def test_each_task_gets_a_fresh_worker_pid(pool):
@@ -64,10 +65,12 @@ def test_parent_process_never_imports_ansible():
     code = (
         "import sys;"
         "from ansible_jsonrpc_server.pool import TaskPool;"
+        "from ansible_jsonrpc_server.messages import RunParams, HostSpec, Connection;"
         "p=TaskPool(forks=1);"
-        "r=p.run_action(%r);"
+        "r=p.run_action(RunParams(host=HostSpec(connection=Connection(type='local')),"
+        " fqcn='ansible.builtin.ping', vars={'ansible_python_interpreter': sys.executable}));"
         "p.shutdown();"
-        "print(r['status'], 'ansible' in sys.modules)" % PING
+        "print(r.status, 'ansible' in sys.modules)"
     )
     out = subprocess.run(
         [sys.executable, "-c", code],

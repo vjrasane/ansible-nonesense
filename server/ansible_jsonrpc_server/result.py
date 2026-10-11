@@ -1,5 +1,6 @@
 from ansible.errors import AnsibleConnectionFailure, AnsibleActionSkip, AnsibleActionFail
 from ansible._internal._errors import _error_utils
+from .messages import ResultFrame
 
 # Mirrors ansible's task-level censor_result (executor/task_result.py): keep only
 # _PRESERVE, replace everything else with a single 'censored' note. Status flags and
@@ -25,8 +26,8 @@ def shape_result(raw, no_log):
     warnings = list(raw.get("warnings") or [])
     deprecations = list(raw.get("deprecations") or [])
     result = _redact(raw) if no_log else raw
-    return {"status": status, "changed": changed, "result": result,
-            "warnings": warnings, "deprecations": deprecations}
+    return ResultFrame(status=status, changed=changed, result=result,
+                       warnings=warnings, deprecations=deprecations)
 
 
 def _redact(raw):

@@ -1,10 +1,14 @@
-import json
+import msgspec
 
 _HEADER_SEP = b"\r\n\r\n"
+_encode = msgspec.json.encode
+_decode = msgspec.json.decode
 
 
 def write_message(stream, obj):
-    body = json.dumps(obj).encode("utf-8")
+    # msgspec.json encodes msgspec Structs transparently, so result frames can be
+    # written without first converting them to dicts.
+    body = _encode(obj)
     stream.write(b"Content-Length: %d\r\n\r\n" % len(body))
     stream.write(body)
     stream.flush()
@@ -18,7 +22,7 @@ def read_message(stream):
     body = _read_exactly(stream, length)
     if body is None:
         raise ConnectionError("truncated message body")
-    return json.loads(body.decode("utf-8"))
+    return _decode(body)
 
 
 def _read_headers(stream):

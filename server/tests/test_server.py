@@ -46,3 +46,16 @@ def test_unknown_method_is_jsonrpc_error_and_survives():
     out = _drive(reqs)
     assert out[0]["id"] == 1 and "error" in out[0]      # unknown method → error
     assert out[1]["id"] == 2 and out[1]["result"]["status"] == "ok"  # survived
+
+
+def test_invalid_params_is_32602_and_survives():
+    reqs = [
+        {"jsonrpc": "2.0", "id": 1, "method": "runAction",
+         "params": {"host": LOCAL}},            # missing required fqcn
+        {"jsonrpc": "2.0", "id": 2, "method": "runAction",
+         "params": {"host": LOCAL, "fqcn": "ansible.builtin.ping", "args": {}, "vars": VARS}},
+        {"jsonrpc": "2.0", "method": "shutdown"},
+    ]
+    out = _drive(reqs)
+    assert out[0]["id"] == 1 and out[0]["error"]["code"] == -32602   # validation at the seam
+    assert out[1]["id"] == 2 and out[1]["result"]["status"] == "ok"  # survived

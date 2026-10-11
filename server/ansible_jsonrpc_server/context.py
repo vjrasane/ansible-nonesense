@@ -6,8 +6,6 @@ from ansible.playbook.task import Task
 from ansible.playbook.play_context import PlayContext
 from ansible.template import Templar
 
-_FLAG_KEYWORDS = ("check_mode", "diff", "no_log")
-
 
 def build_execution(host, fqcn, args, task_vars, flags):
     loader.init_plugin_loader()
@@ -15,20 +13,20 @@ def build_execution(host, fqcn, args, task_vars, flags):
 
     play = Play.load({}, variable_manager=None, loader=dl)
     block = Block(play=play)
-    task_data = {"action": fqcn, "args": args}
-    for kw in _FLAG_KEYWORDS:
-        if kw in flags:
-            task_data[kw] = flags[kw]
-    task = Task.load(task_data, block=block)
+    task = Task.load(
+        {"action": fqcn, "args": args, "check_mode": flags.check_mode,
+         "diff": flags.diff, "no_log": flags.no_log},
+        block=block,
+    )
 
     play_context = PlayContext()
     templar = Templar(loader=dl, variables=task_vars)
 
-    conn_spec = host.get("connection", {})
-    connection = loader.connection_loader.get(conn_spec["type"], play_context, None)
-    connection.set_options(var_options=conn_spec.get("vars", {}))
+    conn_spec = host.connection
+    connection = loader.connection_loader.get(conn_spec.type, play_context, None)
+    connection.set_options(var_options=conn_spec.vars)
 
-    become_vars = host.get("become", {})
+    become_vars = host.become
     if become_vars:
         become = loader.become_loader.get(become_vars.get("ansible_become_method", "sudo"))
         become.set_options(var_options=become_vars)
