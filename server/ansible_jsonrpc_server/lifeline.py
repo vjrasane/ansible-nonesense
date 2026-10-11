@@ -8,7 +8,7 @@ import time
 _PR_SET_PDEATHSIG = 1
 
 
-def arm(death_signal=signal.SIGTERM):
+def arm(death_signal: int = signal.SIGTERM) -> None:
     """Orphan-prevention, part 1 — no threads. Make this process its own group
     leader (so the forkserver + workers join its group), tear the whole group down
     on SIGTERM, and on Linux ask the kernel to signal us the instant our parent
@@ -24,7 +24,7 @@ def arm(death_signal=signal.SIGTERM):
         terminate()
 
 
-def watch_parent(interval=0.5):
+def watch_parent(interval: float = 0.5) -> threading.Thread:
     """Orphan-prevention, part 2 — the portable fallback for PR_SET_PDEATHSIG (e.g.
     macOS) and a backstop for the arm-time race. Start AFTER the forkserver is up."""
     original = os.getppid()
@@ -33,17 +33,17 @@ def watch_parent(interval=0.5):
     return t
 
 
-def _poll(original_ppid, interval):
+def _poll(original_ppid: int, interval: float) -> None:
     while os.getppid() == original_ppid:
         time.sleep(interval)
     terminate()  # reparented → our client is gone
 
 
-def _on_term(signum, frame):
+def _on_term(signum, frame) -> None:
     terminate()
 
 
-def terminate():
+def terminate() -> None:
     # Nuke the whole group — server + forkserver + workers (+ any subprocess a module
     # spawned) — as one unit. A worker mid-task holding an SSH master can't be reaped
     # gracefully, so SIGKILL the group. This kills us too, which is the point.
@@ -53,7 +53,7 @@ def terminate():
         os._exit(1)
 
 
-def _set_pdeathsig(sig):
+def _set_pdeathsig(sig: int) -> None:
     try:
         libc = ctypes.CDLL(ctypes.util.find_library("c"), use_errno=True)
         libc.prctl(_PR_SET_PDEATHSIG, sig)

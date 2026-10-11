@@ -12,7 +12,7 @@ _CENSORED = ("the output has been hidden due to the fact that 'no_log: true' "
              "was specified for this result")
 
 
-def shape_result(raw, no_log):
+def shape_result(raw: dict, no_log: bool) -> ResultFrame:
     raw = dict(raw or {})
     if raw.get("unreachable"):
         status = "unreachable"
@@ -30,13 +30,13 @@ def shape_result(raw, no_log):
                        warnings=warnings, deprecations=deprecations)
 
 
-def _redact(raw):
+def _redact(raw: dict) -> dict:
     censored = {k: raw[k] for k in _PRESERVE if k in raw}
     censored["censored"] = _CENSORED
     return censored
 
 
-def status_from_exception(exc):
+def status_from_exception(exc: BaseException) -> tuple[str, dict]:
     raw = _error_utils.result_dict_from_exception(exc)
     if isinstance(exc, AnsibleConnectionFailure):
         return "unreachable", raw

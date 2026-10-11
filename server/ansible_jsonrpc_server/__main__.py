@@ -6,7 +6,7 @@ from .pool import TaskPool
 from .facts import make_handlers
 
 
-def main():
+def main() -> None:
     # Protect the protocol stream: keep a private dup of stdout for the seam, then
     # point fd 1 (and sys.stdout) at stderr so a stray print() — in this process OR
     # in a forked worker, which inherits fd 1 — can never corrupt the frames.

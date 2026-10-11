@@ -1,9 +1,10 @@
 from ansible.errors import AnsibleError
 from .context import build_execution
+from .messages import ResultFrame, RunParams
 from .result import shape_result, status_from_exception
 
 
-def run_action(params):
+def run_action(params: RunParams) -> ResultFrame:
     no_log = params.flags.no_log
     plugin, task_vars = build_execution(
         params.host, params.fqcn, params.args, params.vars, params.flags,

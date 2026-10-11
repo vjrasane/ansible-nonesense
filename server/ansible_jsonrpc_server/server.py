@@ -1,9 +1,14 @@
 import traceback
+from collections.abc import Callable
+from typing import BinaryIO
+
 import msgspec
 from .protocol import read_message, write_message
 
+Handlers = dict[str, tuple[type, Callable]]
 
-def serve(in_stream, out_stream, handlers=None):
+
+def serve(in_stream: BinaryIO, out_stream: BinaryIO, handlers: Handlers | None = None) -> None:
     # `handlers` maps method name → (ParamType, (params) -> result). ParamType is the
     # msgspec Struct the raw params are validated into at the seam. Default is the
     # in-process harness (unit tests); the real server injects pool-backed handlers,
@@ -38,7 +43,7 @@ def serve(in_stream, out_stream, handlers=None):
             _error(out_stream, req_id, -32000, str(exc), traceback.format_exc())
 
 
-def _error(out_stream, req_id, code, message, data=None):
+def _error(out_stream: BinaryIO, req_id, code: int, message: str, data: object = None) -> None:
     err = {"code": code, "message": message}
     if data is not None:
         err["data"] = data

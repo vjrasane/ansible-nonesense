@@ -1,3 +1,5 @@
+from typing import BinaryIO, NoReturn
+
 import msgspec
 
 _HEADER_SEP = b"\r\n\r\n"
@@ -5,7 +7,7 @@ _encode = msgspec.json.encode
 _decode = msgspec.json.decode
 
 
-def write_message(stream, obj):
+def write_message(stream: BinaryIO, obj: object) -> None:
     # msgspec.json encodes msgspec Structs transparently, so result frames can be
     # written without first converting them to dicts.
     body = _encode(obj)
@@ -14,7 +16,7 @@ def write_message(stream, obj):
     stream.flush()
 
 
-def read_message(stream):
+def read_message(stream: BinaryIO) -> dict | None:
     headers = _read_headers(stream)
     if headers is None:
         return None
@@ -25,7 +27,7 @@ def read_message(stream):
     return _decode(body)
 
 
-def _read_headers(stream):
+def _read_headers(stream: BinaryIO) -> dict[str, str] | None:
     buf = b""
     while _HEADER_SEP not in buf:
         chunk = stream.read(1)
@@ -41,7 +43,7 @@ def _read_headers(stream):
     return headers
 
 
-def _read_exactly(stream, n):
+def _read_exactly(stream: BinaryIO, n: int) -> bytes | None:
     buf = b""
     while len(buf) < n:
         chunk = stream.read(n - len(buf))
@@ -51,5 +53,5 @@ def _read_exactly(stream, n):
     return buf
 
 
-def _raise(msg):
+def _raise(msg: str) -> NoReturn:
     raise ConnectionError(msg)

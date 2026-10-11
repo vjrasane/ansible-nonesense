@@ -5,9 +5,14 @@ from ansible.playbook.block import Block
 from ansible.playbook.task import Task
 from ansible.playbook.play_context import PlayContext
 from ansible.template import Templar
+from ansible.plugins.action import ActionBase
+
+from .messages import Flags, HostSpec
 
 
-def build_execution(host, fqcn, args, task_vars, flags):
+def build_execution(
+    host: HostSpec, fqcn: str, args: dict, task_vars: dict, flags: Flags,
+) -> tuple[ActionBase, dict]:
     loader.init_plugin_loader()
     dl = DataLoader()
 

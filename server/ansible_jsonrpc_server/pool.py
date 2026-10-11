@@ -1,11 +1,14 @@
 import multiprocessing
 import os
-from concurrent.futures import ProcessPoolExecutor
+from collections.abc import Callable
+from concurrent.futures import Future, ProcessPoolExecutor
+
+from .messages import ResultFrame, RunParams
 
 _PRELOAD = "ansible_jsonrpc_server._preload"
 
 
-def _execute(params):
+def _execute(params: RunParams) -> ResultFrame:
     # Lazy import so the PARENT never imports ansible — only the forkserver (via the
     # preload) and its forked workers do. Warm in the worker, so this is a no-op cost.
     from .harness import run_action
@@ -20,7 +23,7 @@ class TaskPool:
     Workers fork from a `forkserver` preloaded with ansible, so recycling costs a
     fork, not an import."""
 
-    def __init__(self, forks=5):
+    def __init__(self, forks: int = 5):
         ctx = multiprocessing.get_context("forkserver")
         ctx.set_forkserver_preload([_PRELOAD])
         self._executor = ProcessPoolExecutor(
@@ -29,18 +32,18 @@ class TaskPool:
             max_tasks_per_child=1,
         )
 
-    def submit(self, fn, *args):
+    def submit(self, fn: Callable, *args) -> Future:
         return self._executor.submit(fn, *args)
 
-    def run_action(self, params):
+    def run_action(self, params: RunParams) -> ResultFrame:
         return self._executor.submit(_execute, params).result()
 
-    def prime(self):
+    def prime(self) -> None:
         # Force the forkserver (and one worker) to start now, while the process is
         # still single-threaded — the forkserver is forked from here, and forking a
         # multithreaded process is the fork-after-threads hazard. Must run before the
         # lifeline watch thread starts.
         self._executor.submit(os.getpid).result()
 
-    def shutdown(self):
+    def shutdown(self) -> None:
         self._executor.shutdown(wait=False, cancel_futures=True)
