@@ -48,3 +48,20 @@ test(
   },
   30_000,
 );
+
+test(
+  "gatherFacts on local returns real facts",
+  async () => {
+    const facts = await client.gatherFacts({
+      host: {
+        id: "local",
+        connection: { type: "local", vars: {} },
+        become: {},
+        gather_subset: ["min"],
+      },
+      vars: { ansible_python_interpreter: python },
+    });
+    expect(facts.ansible_system).toBeDefined();
+  },
+  30_000,
+);

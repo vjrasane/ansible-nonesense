@@ -8,9 +8,18 @@ import {
 } from "vscode-jsonrpc/node";
 
 export interface HostSpec {
+  id?: string;
   connection: { type: string; vars?: Record<string, unknown> };
   become?: Record<string, unknown>;
+  gather_subset?: string[];
 }
+
+export interface GatherFactsParams {
+  host: HostSpec;
+  vars?: Record<string, unknown>;
+}
+
+export type Facts = Record<string, unknown>;
 
 export interface RunActionParams {
   host: HostSpec;
@@ -53,6 +62,10 @@ export class ServerClient {
   runAction(params: RunActionParams): Promise<ResultFrame> {
     // byName: send `params` as the object the server reads, not a positional array.
     return this.conn.sendRequest("runAction", ParameterStructures.byName, params);
+  }
+
+  gatherFacts(params: GatherFactsParams): Promise<Facts> {
+    return this.conn.sendRequest("gatherFacts", ParameterStructures.byName, params);
   }
 
   async close(): Promise<void> {
