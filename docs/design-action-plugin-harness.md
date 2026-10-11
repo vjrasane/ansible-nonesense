@@ -546,35 +546,48 @@ data loss, which is true for collections and false for the venv.
 `ansible-core` is **fetched, never shipped** by the client (step 4 from PyPI) —
 the licensing firewall (§9) holds.
 
-#### 4.8.1 Collections — artifact-pinned at codegen, cached server-side
+#### 4.8.1 Collections — version-pinned at codegen, installed via ansible-galaxy
 
-After bootstrap the server owns collection acquisition (replacing the TS cache),
-but the **version + hash are pinned at codegen, not resolved at runtime** —
-preserving today's reproducibility.
+After bootstrap the server owns collection acquisition. The **version is pinned at
+codegen**; acquisition is **delegated to `ansible-galaxy`** (already in the server's
+venv — it is part of ansible-core), rather than hand-rolling fetch/verify/extract.
 
-When the client's codegen generates a module binding, it embeds the **artifact
-that module depends on**: `{collection, version, hash, url}` (exactly the pin the
-current TS codegen already emits per module). `ansible.builtin.*` modules depend
-on `ansible-core` (installed in bootstrap step 4) and carry no artifact. On
-`run_action`, the client passes the module's artifact inline (a task-scoped
-field, §4.5); the server then:
+**What distinguishes a core module from a collection module on the wire** is the
+fqcn namespace: `ansible.builtin.*` and `ansible.legacy.*` ship with ansible-core and
+need nothing installed; any other fqcn (`community.general.foo`) is a collection
+module. The fqcn carries no version, so `run_action` takes an optional task-scoped
+`collection:{name, version, source?}` (§4.5). Absent → core/builtin, run directly.
+Present → the server **ensures that collection+version is installed before running**:
 
-- **Checks the collections path** for `(collection, version)`; if present, skip.
-- **Fetches by hash** otherwise — downloads the pinned tarball from `url`, verifies
-  `hash`, extracts to the collections path. No runtime Galaxy resolution; the pin
-  is authoritative (the same content-addressed fetch the TS cache does today,
-  moved into the server).
-- **Single-flight** per `(collection, version, hash)` — concurrent tasks naming
-  the same missing collection share one fetch (the `Future`-per-key pattern,
-  §4.7); evict on failure.
+- **Check the collections path** (`MANIFEST.json` version) — if present at the pinned
+  version, skip (no network).
+- Otherwise **shell out**: `ansible-galaxy collection install <name>:<version> -p
+  <collections_path> [--server <source>]`. ansible-galaxy downloads the tarball,
+  **verifies its checksum against Galaxy's published hash**, extracts to the path, and
+  resolves + installs the collection's dependencies. We do **no** hashing, url
+  plumbing, or dependency-closure resolution ourselves — ansible owns all of it.
+- **Single-flight** per collection name (`Future`-per-key, §4.7) so concurrent tasks
+  share one install; evict on failure so the next task retries.
 
-Transitive collection dependencies are resolved **at codegen** (the artifact set
-a module needs is its closure), so the server never does dependency resolution —
-it only fetches exactly the pinned artifacts it is handed. Collections live on a
-**content-addressed collections path under `XDG_CACHE_HOME`** (the layout in §4.8),
-never in `site-packages`. Keyed by `(collection, version, hash)` rather than server
-version, one extracted copy is **shared across server/venv versions** and is safe
-for a cache reaper to purge — re-fetched by hash on next use.
+**Why shell out rather than import the install code:** the parent is ansible-free
+(§4.9), and install is a parent-side provisioning step, so it cannot import ansible
+there; and ansible-galaxy's install path has no stable *library* API (the supported
+contract is the CLI), so a subprocess couples to a stable interface and isolates its
+network I/O, file writes, and `sys.exit`. (`_execute_module`/`connection_loader`,
+which we *do* import in workers, are stable core; the galaxy install internals are not.)
+
+**Reproducibility** rests on the codegen version pin + **Galaxy version immutability**
+(Galaxy rejects re-publishing a version with different content), not a content hash.
+A `hash`/`url`/offline-mirror pin can be added later without a wire change (additive)
+if fully offline, Galaxy-independent reproducibility is needed.
+
+**First-cut assumption: one version per collection per session** — the client's
+codegen resolves a project's collection deps once, so a single shared collections
+path (under `XDG_CACHE_HOME`, §4.8) suffices; no multi-version side-by-side. The
+server sets `ANSIBLE_COLLECTIONS_PATH` (and isolates `ANSIBLE_HOME`) **at startup,
+before the forkserver's `init_plugin_loader`**, so workers resolve collection modules
+*and their action plugins* from that path; the finder scans it lazily, so a collection
+installed after the forkserver started is still found by a freshly-forked worker.
 
 ### 4.9 Concurrency: a process-per-task pool
 
@@ -600,8 +613,8 @@ ansible's own model — a **bounded pool of worker processes, one task per proce
 
 The **parent** (long-lived) owns the stdio seam, the fact/collection caches, and
 single-flight. Per `run_action` it provisions facts (§4.7) and the module's
-collection artifact (§4.8.1) **parent-side** (so the caches live in one place),
-then submits a self-contained `(task + injected facts)` job to the pool. In the
+collection (§4.8.1, via `ansible-galaxy`) **parent-side** (so the caches live in one
+place), then submits a self-contained `(task + injected facts)` job to the pool. In the
 first cut every child is a **native-connection** job — it does its own SSH
 (sharing the `ControlMaster` socket via the filesystem) and returns a result, a
 pure pool job with no callbacks. (The deferred delegate connection, §4.4, would
