@@ -144,8 +144,9 @@ def test_runs_collection_module_end_to_end(tmp_path):
     # a collection module (and would its action plugin) from the collections path.
     from ansible_jsonrpc_server.protocol import read_message, write_message
 
-    _lay_out_collection(str(tmp_path))
-    env = {**os.environ, "ANSIBLE_COLLECTIONS_PATH": str(tmp_path)}
+    # server data dir = $XDG_DATA_HOME/ansible-jsonrpc-server → collections/ under it
+    _lay_out_collection(os.path.join(str(tmp_path), "ansible-jsonrpc-server", "collections"))
+    env = {**os.environ, "XDG_DATA_HOME": str(tmp_path)}
     proc = subprocess.Popen(
         [sys.executable, "-m", "ansible_jsonrpc_server"],
         stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,

@@ -1,22 +1,10 @@
 import os
 import sys
 from . import lifeline
+from .paths import cache_dir, data_dir
 from .server import serve
 from .pool import TaskPool
 from .facts import make_handlers
-
-
-def _collections_path() -> str:
-    # Honor an explicit ANSIBLE_COLLECTIONS_PATH (CI/sandboxes/tests); else derive one
-    # under the server's own tree so we never touch a user's ~/.ansible (§4.8).
-    override = os.environ.get("ANSIBLE_COLLECTIONS_PATH")
-    if override:
-        return override.split(os.pathsep)[0]
-    home = os.environ.get("ANSIBLE_JSONRPC_SERVER_HOME") or os.path.join(
-        os.environ.get("XDG_CACHE_HOME", os.path.expanduser("~/.cache")),
-        "ansible-jsonrpc-server",
-    )
-    return os.path.join(home, "collections")
 
 
 def main() -> None:
@@ -28,12 +16,18 @@ def main() -> None:
     os.dup2(sys.stderr.fileno(), 1)
     sys.stdout = sys.stderr
 
-    # Collections path + isolated ANSIBLE_HOME, set BEFORE the forkserver's
-    # init_plugin_loader so workers resolve collection modules + action plugins there.
-    collections_path = _collections_path()
+    # Point ansible's dirs at the server's own tree, set BEFORE the forkserver's
+    # init_plugin_loader. We *override* (not inherit) these: the user's / devenv's
+    # ANSIBLE_COLLECTIONS_PATH and ANSIBLE_HOME are for their ansible, not ours — the
+    # server manages its own pinned collections and must never read/write a foreign
+    # location, nor leak its hard-kill tmp litter into ~/.ansible. Collections are
+    # installed deps → data dir; ansible scratch → cache dir (safe to purge).
+    collections_path = os.path.join(data_dir(), "collections")
+    ansible_home = os.path.join(cache_dir(), "ansible")
     os.makedirs(collections_path, exist_ok=True)
     os.environ["ANSIBLE_COLLECTIONS_PATH"] = collections_path
-    os.environ.setdefault("ANSIBLE_HOME", os.path.join(collections_path, os.pardir, "home"))
+    os.environ["ANSIBLE_HOME"] = ansible_home
+    os.environ["ANSIBLE_LOCAL_TEMP"] = os.path.join(ansible_home, "tmp")
 
     # Orphan-prevention: own process group + SIGTERM/PR_SET_PDEATHSIG, armed while
     # single-threaded and before the pool so the forkserver/workers join the group.
