@@ -1,5 +1,6 @@
 import os
 import sys
+from . import lifeline
 from .server import serve
 from .pool import TaskPool
 
@@ -13,15 +14,21 @@ def main():
     os.dup2(sys.stderr.fileno(), 1)
     sys.stdout = sys.stderr
 
-    # Pool created before any threads exist (fork-after-threads hazard), and after
-    # the fd redirect so its forkserver/workers inherit fd 1 → stderr.
+    # Orphan-prevention: own process group + SIGTERM/PR_SET_PDEATHSIG, armed while
+    # single-threaded and before the pool so the forkserver/workers join the group.
+    lifeline.arm()
     pool = TaskPool()
+    pool.prime()          # forkserver up while single-threaded (fork-after-threads)
+    lifeline.watch_parent()  # getppid fallback — safe to start a thread now
     try:
         with os.fdopen(in_fd, "rb", buffering=0) as in_stream, \
                 os.fdopen(out_fd, "wb", buffering=0) as out_stream:
             serve(in_stream, out_stream, run=pool.run_action)
     finally:
-        pool.shutdown()
+        # Tear down the whole group — graceful exit (EOF/shutdown) still leaves the
+        # forkserver + workers alive otherwise. pool.shutdown() can't reap a worker
+        # mid-task; killpg does. This SIGKILLs us too, which is the intended exit.
+        lifeline.terminate()
 
 
 if __name__ == "__main__":

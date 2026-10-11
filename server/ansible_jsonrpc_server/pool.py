@@ -1,4 +1,5 @@
 import multiprocessing
+import os
 from concurrent.futures import ProcessPoolExecutor
 
 _PRELOAD = "ansible_jsonrpc_server._preload"
@@ -33,6 +34,13 @@ class TaskPool:
 
     def run_action(self, params):
         return self._executor.submit(_execute, params).result()
+
+    def prime(self):
+        # Force the forkserver (and one worker) to start now, while the process is
+        # still single-threaded — the forkserver is forked from here, and forking a
+        # multithreaded process is the fork-after-threads hazard. Must run before the
+        # lifeline watch thread starts.
+        self._executor.submit(os.getpid).result()
 
     def shutdown(self):
         self._executor.shutdown(wait=False, cancel_futures=True)
