@@ -4,6 +4,7 @@ from concurrent.futures import Future
 
 import msgspec
 
+from .collections import CollectionCache
 from .messages import GatherFactsParams, HostSpec, ResultFrame, RunParams
 
 RunAction = Callable[[RunParams], ResultFrame]
@@ -63,21 +64,24 @@ class FactCache:
         return frame.result["ansible_facts"]
 
 
-def make_handlers(run_action: RunAction) -> dict[str, tuple[type, Callable]]:
-    """Build the JSON-RPC method handlers that wrap execution with fact caching.
-    `run_action(params: RunParams) -> ResultFrame` is the pool's executor."""
-    cache = FactCache(run_action)
+def make_handlers(run_action: RunAction, collections_path: str) -> dict[str, tuple[type, Callable]]:
+    """Build the JSON-RPC method handlers that wrap execution with collection + fact
+    provisioning. `run_action(params: RunParams) -> ResultFrame` is the pool's executor."""
+    facts = FactCache(run_action)
+    collections = CollectionCache(collections_path)
 
     def run(params: RunParams) -> ResultFrame:
+        if params.collection is not None:
+            collections.ensure(params.collection)   # install before the worker runs
         host = params.host
         if host.gather_subset is not None:
-            facts = cache.ensure(host, params.vars)
+            gathered = facts.ensure(host, params.vars)
             # ansible exposes facts both namespaced and flattened as top-level vars
-            merged = {**params.vars, "ansible_facts": facts, **facts}
+            merged = {**params.vars, "ansible_facts": gathered, **gathered}
             params = msgspec.structs.replace(params, vars=merged)
         return run_action(params)
 
     def gather(params: GatherFactsParams) -> dict:
-        return cache.ensure(params.host, params.vars)
+        return facts.ensure(params.host, params.vars)
 
     return {"runAction": (RunParams, run), "gatherFacts": (GatherFactsParams, gather)}

@@ -29,12 +29,19 @@ class Flags(msgspec.Struct):
     verbosity: int = 0
 
 
+class Collection(msgspec.Struct):
+    name: str                      # dotted "namespace.collection"
+    version: str
+    source: str | None = None      # galaxy server / Automation Hub; None → default galaxy
+
+
 class RunParams(msgspec.Struct):
     host: HostSpec
     fqcn: str
     args: dict = msgspec.field(default_factory=dict)
     vars: dict = msgspec.field(default_factory=dict)
     flags: Flags = msgspec.field(default_factory=Flags)
+    collection: Collection | None = None   # None → core/builtin, nothing to install
 
 
 class GatherFactsParams(msgspec.Struct):

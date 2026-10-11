@@ -96,7 +96,7 @@ def test_run_action_injects_facts_when_subset_present():
         captured["vars"] = params.vars
         return ResultFrame(status="ok", changed=False, result={})
 
-    _, handler = make_handlers(run)["runAction"]
+    _, handler = make_handlers(run, ".")["runAction"]
     handler(RunParams(host=HOST, fqcn="ansible.builtin.ping", vars={"x": 1}))
     assert captured["vars"]["ansible_pkg_mgr"] == "apt"              # flattened top-level
     assert captured["vars"]["ansible_facts"]["ansible_pkg_mgr"] == "apt"  # and namespaced
@@ -110,14 +110,14 @@ def test_run_action_without_subset_does_not_gather():
         calls.append(params.fqcn)
         return ResultFrame(status="ok", changed=False, result={})
 
-    _, handler = make_handlers(run)["runAction"]
+    _, handler = make_handlers(run, ".")["runAction"]
     host = HostSpec(id="h1", connection=Connection(type="local"))  # no gather_subset
     handler(RunParams(host=host, fqcn="ansible.builtin.ping"))
     assert calls == ["ansible.builtin.ping"]            # no setup call
 
 
 def test_gather_facts_handler_returns_facts():
-    _, handler = make_handlers(lambda p: _setup_frame({"ansible_pkg_mgr": "apt"}))["gatherFacts"]
+    _, handler = make_handlers(lambda p: _setup_frame({"ansible_pkg_mgr": "apt"}), ".")["gatherFacts"]
     assert handler(GatherFactsParams(host=HOST)) == {"ansible_pkg_mgr": "apt"}
 
 
