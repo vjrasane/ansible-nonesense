@@ -12,3 +12,11 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["ansible_jsonrpc_server"]
+
+[tool.pyright]
+# Resolve imports against the devenv venv (ansible-core, msgspec) and treat server/
+# as a source root so `ansible_jsonrpc_server.*` resolves (it's not pip-installed).
+venvPath = "../.devenv/state"
+venv = "venv"
+extraPaths = ["."]
+pythonVersion = "3.12"
