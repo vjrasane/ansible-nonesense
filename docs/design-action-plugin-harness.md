@@ -525,23 +525,32 @@ mismatch — a cache cleaner may delete `XDG_CACHE_HOME` contents at any time wi
 data loss, which is true for collections and false for the venv.
 
 ```
-~/.local/share/ansible-jsonrpc-server/     # XDG_DATA_HOME — installed, survives cache purge
-└── venv/<server-version>/                 # one venv per pinned version (coexist)
-    ├── bin/python, pip, ansible-core + deps
-    └── .lock                              # flock: first-run bootstrap guard
+~/.local/share/ansible-jsonrpc-server/     # XDG_DATA_HOME — installed deps, survive a cache purge
+├── venv/<server-version>/                 # one venv per pinned version (coexist)
+│   ├── bin/python, pip, ansible-core + deps
+│   └── .lock                              # flock: first-run bootstrap guard
+└── collections/ansible_collections/<ns>/<name>/   # ansible-galaxy install target (§4.8.1)
 
-~/.cache/ansible-jsonrpc-server/           # XDG_CACHE_HOME — re-fetchable, safe to purge
-└── collections/<collection>/<version>-<hash>/   # content-addressed; shared across venv versions
-
-~/.local/state/ansible-jsonrpc-server/     # XDG_STATE_HOME — logs/locks, if any
+~/.cache/ansible-jsonrpc-server/           # XDG_CACHE_HOME — scratch, always safe to purge
+└── ansible/                               # ANSIBLE_HOME: AnsiballZ cache, local tmp, CP sockets
+    └── tmp/
 ```
 
-- **Isolate ansible's own dirs.** The server points `ANSIBLE_HOME`, the collections
-  path, and local/remote tmp at its own tree, so it never pollutes or collides with
-  a real `~/.ansible` the user may already have — it stays self-contained.
-- **One explicit override.** Honor the `XDG_*` vars; also accept
-  `ANSIBLE_JSONRPC_SERVER_HOME` to relocate the whole tree at once (CI, sandboxes,
-  read-only homes).
+- **Split by what a purge costs.** Installed deps (venv, pinned collections) go in the
+  **data dir** — deleting it means a re-bootstrap / re-install. Ansible's own scratch
+  goes in the **cache dir** — `rm -rf ~/.cache` must always be harmless, and that is
+  exactly where it is harmless. They genuinely differ, so they get different dirs.
+- **Override ansible's dirs, don't inherit them.** The server *sets*
+  `ANSIBLE_HOME`/`ANSIBLE_COLLECTIONS_PATH`/`ANSIBLE_LOCAL_TEMP` into its own tree — it
+  never reads the user's/devenv's values (those are for their ansible), so it can't
+  pollute or collide with a real `~/.ansible` or a workspace collections path.
+- **Why scratch in cache, not `~/.ansible`.** The lifeline `killpg`s workers mid-task
+  (client death, timeouts), so ansible's tmp cleanup is skipped and `ansible-local-*`
+  leaks. Putting `ANSIBLE_HOME` in the server's cache dir keeps that litter out of the
+  user's home and somewhere always-safe to purge (and auto-reaped where the OS cleans
+  `~/.cache`, though we don't rely on that).
+- **Relocate via XDG.** `XDG_DATA_HOME`/`XDG_CACHE_HOME` move the dirs (CI, sandboxes,
+  read-only homes); no bespoke env var.
 
 `ansible-core` is **fetched, never shipped** by the client (step 4 from PyPI) —
 the licensing firewall (§9) holds.
@@ -583,7 +592,8 @@ if fully offline, Galaxy-independent reproducibility is needed.
 
 **First-cut assumption: one version per collection per session** — the client's
 codegen resolves a project's collection deps once, so a single shared collections
-path (under `XDG_CACHE_HOME`, §4.8) suffices; no multi-version side-by-side. The
+path (under the **data dir**, `XDG_DATA_HOME`, §4.8) suffices; no multi-version
+side-by-side. The
 server sets `ANSIBLE_COLLECTIONS_PATH` (and isolates `ANSIBLE_HOME`) **at startup,
 before the forkserver's `init_plugin_loader`**, so workers resolve collection modules
 *and their action plugins* from that path; the finder scans it lazily, so a collection
