@@ -1,0 +1,77 @@
+import threading
+from concurrent.futures import Future
+
+# Fact gathering + caching, server-owned (design §4.7). Lives in the ansible-free
+# parent: it imports no ansible, it just orchestrates `setup` runs through whatever
+# `run_action` it is given (the fork pool) and caches the result.
+
+
+def _normalize(subset):
+    return tuple(sorted(subset))
+
+
+class FactCache:
+    """Per-host fact cache, keyed by (host.id, normalized gather_subset). Single-flight:
+    concurrent callers for the same key share one gather (Future-per-key); a failed
+    gather is evicted so the next call retries rather than caching the error."""
+
+    def __init__(self, run_action):
+        self._run = run_action
+        self._futures = {}
+        self._lock = threading.Lock()
+
+    def ensure(self, host, task_vars):
+        subset = _normalize(host.get("gather_subset") or ["min"])
+        key = (host["id"], subset)
+        with self._lock:
+            fut = self._futures.get(key)
+            owner = fut is None
+            if owner:
+                fut = Future()
+                self._futures[key] = fut
+        if owner:
+            try:
+                fut.set_result(self._gather(host, task_vars, subset))
+            except BaseException as exc:  # noqa: BLE001 — propagate after eviction
+                with self._lock:
+                    if self._futures.get(key) is fut:
+                        del self._futures[key]
+                fut.set_exception(exc)
+        return fut.result()
+
+    def invalidate(self, host_id):
+        with self._lock:
+            for key in [k for k in self._futures if k[0] == host_id]:
+                del self._futures[key]
+
+    def _gather(self, host, task_vars, subset):
+        frame = self._run({
+            "host": {"connection": host["connection"], "become": host.get("become", {})},
+            "fqcn": "ansible.builtin.setup",
+            "args": {"gather_subset": list(subset)},
+            "vars": task_vars,
+            "flags": {},
+        })
+        if frame.get("status") != "ok":
+            raise RuntimeError("fact gather failed: %r" % (frame.get("result"),))
+        return frame["result"]["ansible_facts"]
+
+
+def make_handlers(run_action):
+    """Build the JSON-RPC method handlers that wrap execution with fact caching.
+    `run_action(params) -> result-frame` is the pool's executor."""
+    cache = FactCache(run_action)
+
+    def run(params):
+        host = params.get("host") or {}
+        if host.get("gather_subset") is not None:
+            facts = cache.ensure(host, params.get("vars") or {})
+            # ansible exposes facts both namespaced and flattened as top-level vars
+            merged = {**(params.get("vars") or {}), "ansible_facts": facts, **facts}
+            params = {**params, "vars": merged}
+        return run_action(params)
+
+    def gather(params):
+        return cache.ensure(params.get("host") or {}, params.get("vars") or {})
+
+    return {"runAction": run, "gatherFacts": gather}
