@@ -1,7 +1,9 @@
 import multiprocessing
 import os
 from collections.abc import Callable
-from concurrent.futures import Future, ProcessPoolExecutor
+from concurrent.futures import Future
+
+from pebble import ProcessPool
 
 from .messages import ResultFrame, RunParams
 
@@ -17,33 +19,31 @@ def _execute(params: RunParams) -> ResultFrame:
 
 
 class TaskPool:
-    """A process-per-task pool. Ansible controller state is process-global and not
-    thread-safe, so each task runs in its own worker, recycled after one task
-    (`max_tasks_per_child=1`) → no loader-cache/CLIARGS/config leakage between tasks.
-    Workers fork from a `forkserver` preloaded with ansible, so recycling costs a
-    fork, not an import."""
+    """A process-per-task pool over `pebble.ProcessPool`. Ansible controller state is
+    process-global and not thread-safe, so each task runs in its own worker, recycled
+    after one task (`max_tasks=1`) → no loader-cache/CLIARGS/config leakage between
+    tasks. Workers fork from a `forkserver` preloaded with ansible, so recycling costs a
+    fork, not an import. pebble (unlike `ProcessPoolExecutor`) can cancel a *running*
+    task and time it out, recovering the pool — see submit()/schedule()."""
 
     def __init__(self, forks: int = 5):
         ctx = multiprocessing.get_context("forkserver")
         ctx.set_forkserver_preload([_PRELOAD])
-        self._executor = ProcessPoolExecutor(
-            max_workers=forks,
-            mp_context=ctx,
-            max_tasks_per_child=1,
-        )
+        self._pool = ProcessPool(max_workers=forks, max_tasks=1, context=ctx)
 
     def submit(self, fn: Callable, *args) -> Future:
-        return self._executor.submit(fn, *args)
+        return self._pool.schedule(fn, args=args)
 
     def run_action(self, params: RunParams) -> ResultFrame:
-        return self._executor.submit(_execute, params).result()
+        return self._pool.schedule(_execute, args=(params,)).result()
 
     def prime(self) -> None:
         # Force the forkserver (and one worker) to start now, while the process is
         # still single-threaded — the forkserver is forked from here, and forking a
         # multithreaded process is the fork-after-threads hazard. Must run before the
         # lifeline watch thread starts.
-        self._executor.submit(os.getpid).result()
+        self._pool.schedule(os.getpid).result()
 
     def shutdown(self) -> None:
-        self._executor.shutdown(wait=False, cancel_futures=True)
+        self._pool.stop()
+        self._pool.join()
