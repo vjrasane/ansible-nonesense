@@ -32,3 +32,27 @@ def test_no_log_redacts():
     out = run_action(_params("ansible.builtin.command",
                              {"_raw_params": "echo secret"}, flags=Flags(no_log=True)))
     assert "secret" not in str(out.result)
+
+
+def test_timeout_returns_timed_out():
+    out = run_action(_params("ansible.builtin.command",
+                             {"_raw_params": "sleep 5"}, flags=Flags(timeout=1)))
+    assert out.status == "timed_out"
+
+
+def test_timeout_not_triggered_for_fast_task():
+    out = run_action(_params("ansible.builtin.ping", {}, flags=Flags(timeout=10)))
+    assert out.status == "ok"
+    assert out.result["ping"] == "pong"
+
+
+def test_timeout_through_pool_worker():
+    from ansible_jsonrpc_server.pool import TaskPool
+
+    pool = TaskPool(forks=1)
+    try:
+        out = pool.run_action(_params("ansible.builtin.command",
+                                      {"_raw_params": "sleep 5"}, flags=Flags(timeout=1)))
+    finally:
+        pool.shutdown()
+    assert out.status == "timed_out"

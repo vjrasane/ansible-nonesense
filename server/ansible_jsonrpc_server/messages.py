@@ -27,6 +27,7 @@ class Flags(msgspec.Struct):
     diff: bool = False
     no_log: bool = False
     verbosity: int = 0
+    timeout: int | None = None      # seconds; None/0 → no task timeout
 
 
 class Collection(msgspec.Struct):
