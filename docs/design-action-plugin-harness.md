@@ -203,7 +203,8 @@ The task's optional `flags` (§4.5) map to how `_update_module_args`
   `Display` singleton can't leak across tasks.
 - `check_mode` on a plugin lacking support → `AnsibleActionSkip` → `status:
   skipped` (§4.3.3).
-- `timeout` → ansible's `task.timeout` keyword (§4.10).
+- `timeout` → in-worker `signal.alarm` around `run()`, with a pebble hard backstop
+  (§4.10).
 - `no_log` drives result/invocation redaction (§4.4 secrets); arg-level `no_log` (password
   params) is automatic via the module's argspec. The remaining `_ansible_*`
   (`keep_remote_files`, `syslog_facility`, `tmpdir`, `remote_tmp`,
@@ -238,8 +239,8 @@ normal outcome, not a protocol error.
 
 Exceptions map to status via ansible's own `result_dict_from_exception`:
 `AnsibleConnectionFailure` → `unreachable`; `AnsibleActionFail`/`AnsibleActionSkip`/
-module `failed` → `failed`/`skipped`; `TaskTimeoutError` → `timed_out`; unexpected
-→ `error`. `no_log` redaction (task- and arg-level) is applied here, before the
+module `failed` → `failed`/`skipped`; unexpected → `error`. The in-worker
+`signal.alarm` firing (§4.10) is caught separately and returns `timed_out` directly. `no_log` redaction (task- and arg-level) is applied here, before the
 frame leaves the server (§4.4).
 
 ### 4.4 Connections and credentials
@@ -385,8 +386,8 @@ to a task.
 - **Children can't write the seam; the parent synthesizes terminal events.** Worker
   children have stdout redirected to stderr (above), so child-side events are
   **funneled to the parent**, which assigns globally-unique ids (e.g.
-  `<worker-pid>:<n>`) and writes them. Because a worker may be SIGKILLed
-  (timeout/cancel → process-group kill, §4.10) without ever sending a `close`, the
+  `<worker-pid>:<n>`) and writes them. Because a worker may be killed
+  (timeout/cancel → pebble worker kill, §4.10) without ever sending a `close`, the
   parent — which observes the worker's exit — **emits the terminal `close`/`end`
   itself on reap**, so the client never leaks a forever-"open" id. Parent-side
   events (warmup, collection fetch, pool lifecycle) emit directly, no funnel.
@@ -608,32 +609,40 @@ plugin loaders and their caches, the collection-finder config, the config cache 
 §7), built for process isolation, not thread isolation. So the server uses
 ansible's own model — a **bounded pool of worker processes, one task per process**:
 
-- stdlib `concurrent.futures.ProcessPoolExecutor(max_workers=forks,
-  mp_context=get_context("forkserver"), max_tasks_per_child=1)`. No external dep.
-- A **forkserver**, started **before** the stdin-watcher thread (dodging the
-  fork-after-threads hazard), **preloads ansible and runs `init_plugin_loader()`**
-  at import time, so every worker forks from a warm, configured ansible via COW —
-  **no per-task import** (the import lives in the persistent forkserver, not the
-  workers; recycling re-forks from it).
-- `max_tasks_per_child=1` recycles each worker after one task, so no ansible
-  global state (loader caches, `CLIARGS`, `chdir`/env) leaks between tasks. Fork
-  from the forkserver is cheap, so recycling costs ≈ a `fork()`, not an import.
-  (`spawn` would re-import per task — rejected for that reason.)
-- `max_workers` = the `forks` limit — concurrency cap and backpressure.
+- **`pebble.ProcessPool(max_workers=forks, max_tasks=1, context=forkserver)`.** We
+  reach past `concurrent.futures.ProcessPoolExecutor` for one reason: it cannot
+  **cancel a running task** (killing one of its workers raises `BrokenProcessPool` and
+  fails *every* in-flight future), which §4.10 needs. pebble cancels/times-out a running
+  task and **recovers the pool**, over the *same* forkserver context — so we keep the
+  warm-fork model and gain killability. (Full task queues — Celery/RQ — were rejected:
+  broker-based, distributed, background-job semantics, wrong for a self-contained local
+  stdio server.)
+- A **forkserver**, primed **before** the lifeline watch thread (dodging the
+  fork-after-threads hazard), **preloads ansible and runs `init_plugin_loader()`**, so
+  every worker forks from a warm, configured ansible via COW — **no per-task import**.
+- `max_tasks=1` recycles each worker after one task, so no ansible global state
+  (loader caches, `CLIARGS`, `chdir`/env) leaks between tasks; fork from the forkserver
+  is cheap, so recycling costs ≈ a `fork()`, not an import.
+- pebble workers stay in the **server's process group**, so the lifeline's `killpg`
+  (§4.6) tree-kills them unchanged — no per-worker groups.
 
-The **parent** (long-lived) owns the stdio seam, the fact/collection caches, and
-single-flight. Per `run_action` it provisions facts (§4.7) and the module's
-collection (§4.8.1, via `ansible-galaxy`) **parent-side** (so the caches live in one
-place), then submits a self-contained `(task + injected facts)` job to the pool. In the
-first cut every child is a **native-connection** job — it does its own SSH
-(sharing the `ControlMaster` socket via the filesystem) and returns a result, a
-pure pool job with no callbacks. (The deferred delegate connection, §4.4, would
-add a child→parent control pipe for `exec`/`put`/`fetch`; not needed now.)
+**Concurrent dispatch (not a thread-per-task-path).** The seam must stay responsive
+(to `$/cancelRequest`, to new work) while tasks run, so `serve()` is split: a **reader
+thread** only reads frames and routes control notifications (shutdown, `$/cancelRequest`)
+inline; every request is handed to a **dispatch `ThreadPoolExecutor`**. Those handler
+threads do only I/O and *wait on the process pool* — they **never touch ansible**, so
+threading them is safe (the ansible thread-unsafety lives entirely in the worker
+processes). The **parent** (these threads) owns the stdio seam, the fact/collection
+caches, and single-flight: per `runAction` it provisions facts (§4.7) and the module's
+collection (§4.8.1) **parent-side**, then submits a self-contained job to the pool.
+Every child is a **native-connection** job (its own SSH over the shared `ControlMaster`,
+no callbacks); the deferred delegate (§4.4) would add a child→parent pipe.
 
 Because the parent is the **sole owner of the stdio seam**, it is also the **single
 writer** for the server→client notifications of §4.5.1: all outbound frames
 (responses *and* notifications, which may arise on the dispatch loop or a background
-thread like a cache warmup) pass through **one lock/queue** so they never interleave.
+thread like a cache warmup) pass through **one write lock** so they never interleave.
+Responses are therefore **unordered**, correlated by `id`.
 Parent-side events (warmup, collection fetch, pool lifecycle) emit directly; any
 **child-side** event (e.g. per-connection lifecycle inside a worker) is **funneled to
 the parent** — children's stdout is redirected to stderr, so they cannot write the
@@ -644,22 +653,32 @@ worker's exit (including a SIGKILL from §4.10), **synthesizes the terminal
 ### 4.10 Timeouts and cancellation
 
 Both reduce to "kill the task's worker" — cheap because §4.9 isolates each task in
-its own process.
+its own process. Both are **two-layer**: a clean in-worker path that produces a
+proper result frame, and a pebble hard-kill backstop for a worker that won't yield.
 
-- **Timeout.** A per-task `timeout` (`flags`, §4.5) is forwarded as ansible's
-  **`task.timeout`** keyword — the worker self-aborts via SIGALRM
-  (`TaskTimeoutError`, `task_executor.py:621`) and returns a failed result
-  (`status: timed_out`, §4.3.3). The **parent also enforces a wall-clock deadline**
-  on the worker's result future (slightly longer) and **kills the worker's
-  process-group** on overrun — the authoritative backstop for hangs SIGALRM can't
-  interrupt. The connect phase is separately bounded by the connection `timeout`
-  var (§4.4). No implicit task timeout unless the client sets one.
-- **Cancellation.** The client sends JSON-RPC **`$/cancelRequest(id)`**; the parent
-  maps `id` → worker and **terminates its process-group** (SIGTERM→SIGKILL, so the
-  ssh `ControlMaster` and children die too), returning `status: cancelled`.
-  Ansible execution is blocking, so killing the isolated worker is the only
-  reliable abort; already-applied remote side effects are not rolled back (as in
-  ansible).
+- **Timeout.** A per-task `timeout` (`flags`, §4.5) is enforced **inside the worker**
+  by `signal.alarm` around `plugin.run()` (`harness.run_action`): on fire it raises,
+  and the worker returns a clean `status: timed_out` frame (§4.3.3). As a **backstop**
+  the parent schedules the pebble task with `timeout = t + _TIMEOUT_GRACE` (5s); if the
+  soft alarm was swallowed (a wedged C call, an ignored signal), pebble **kills the
+  worker** and the parent maps the resulting `TimeoutError` to `status: timed_out`. The
+  connect phase is separately bounded by the connection `timeout` var (§4.4). No
+  implicit task timeout unless the client sets one.
+- **Cancellation.** The client sends JSON-RPC **`$/cancelRequest(id)`**. The reader
+  thread looks up the `id`'s **`Cancellation` token** (registered before dispatch) and
+  cancels it; the token holds the task's pebble `Future` (bound by `pool.run_action`,
+  **cancel-on-bind** so a cancel that races ahead of submission still lands), and
+  `future.cancel()` **kills the worker**. The parent maps `CancelledError` →
+  `status: cancelled`. Ansible execution is blocking, so killing the isolated worker is
+  the only reliable abort; already-applied remote side effects are not rolled back (as
+  in ansible).
+
+> **Known limitation.** pebble kills the **worker PID**, not its process group, so a
+> module's own child processes (an `ssh`/`ControlMaster`, a shelled-out command) can be
+> **orphaned** on timeout/cancel rather than reaped. The §4.6 lifeline still tree-kills
+> everything on server exit, so orphans cannot outlive the server — but mid-session they
+> leak until then. Moving workers to their own process groups and `killpg`-ing on
+> cancel is the fix; deferred.
 
 ## 5. Options Considered
 
@@ -706,10 +725,11 @@ reimplementation of ansible.
 not one per host (which wouldn't help: concurrency is per task on a host, so
 same-host tasks overlap regardless). Because ansible's controller state is
 process-global (not thread-safe), the task path runs in a **process-per-task
-pool** (`ProcessPoolExecutor` over a `forkserver` context with ansible preloaded,
-`max_tasks_per_child=1`, `max_workers=forks`), detailed in §4.9. Shared-host facts
-and collections are handled by the parent-side single-flight caches (§4.7, §4.8.1),
-not by the topology.
+pool** (`pebble.ProcessPool` over a `forkserver` context with ansible preloaded,
+`max_tasks=1`, `max_workers=forks` — pebble over `ProcessPoolExecutor` for its
+cancel-a-running-task/timeout support, §4.10), fed by a reader-thread + dispatch
+thread-pool front end, detailed in §4.9. Shared-host facts and collections are
+handled by the parent-side single-flight caches (§4.7, §4.8.1), not by the topology.
 
 ## 6. What This Retires, What Survives
 
