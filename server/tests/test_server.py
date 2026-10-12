@@ -89,3 +89,43 @@ def test_requests_are_dispatched_concurrently():
     elapsed = time.monotonic() - start
     assert set(out) == {1, 2}
     assert elapsed < 0.9, "handlers ran serially (%.2fs), not concurrently" % elapsed
+
+
+def test_cancellation_cancels_future_bound_after_the_cancel():
+    from ansible_jsonrpc_server.cancellation import Cancellation
+
+    class _FakeFuture:
+        def __init__(self):
+            self.cancelled = False
+
+        def cancel(self):
+            self.cancelled = True
+
+    token = Cancellation()
+    token.cancel()                 # cancel arrives before the task is submitted
+    fut = _FakeFuture()
+    token.bind(fut)                # future bound later → must be cancelled on bind
+    assert fut.cancelled
+
+
+def test_cancel_request_cancels_a_running_task(tmp_path):
+    from ansible_jsonrpc_server.facts import make_handlers
+    from ansible_jsonrpc_server.pool import TaskPool
+
+    pool = TaskPool(forks=2)
+    pool.prime()
+    handlers = make_handlers(pool.run_action, str(tmp_path))
+    try:
+        start = time.monotonic()
+        out = _drive([
+            {"jsonrpc": "2.0", "id": 1, "method": "runAction",
+             "params": {"host": LOCAL, "fqcn": "ansible.builtin.command",
+                        "args": {"_raw_params": "sleep 30"}, "vars": VARS}},
+            {"jsonrpc": "2.0", "method": "$/cancelRequest", "params": {"id": 1}},
+            {"jsonrpc": "2.0", "method": "shutdown"},
+        ], handlers=handlers)
+        elapsed = time.monotonic() - start
+    finally:
+        pool.shutdown()
+    assert out[1]["result"]["status"] == "cancelled"
+    assert elapsed < 20, "cancel did not short-circuit the 30s sleep (%.1fs)" % elapsed

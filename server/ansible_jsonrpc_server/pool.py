@@ -1,13 +1,17 @@
 import multiprocessing
 import os
 from collections.abc import Callable
-from concurrent.futures import Future
+from concurrent.futures import CancelledError, Future
 
 from pebble import ProcessPool
 
+from .cancellation import bind_future
 from .messages import ResultFrame, RunParams
 
 _PRELOAD = "ansible_jsonrpc_server._preload"
+# pebble's hard kill fires this many seconds after the in-worker soft SIGALRM (§4.10),
+# so a well-behaved task self-reports timed_out and only a wedged worker is killed.
+_TIMEOUT_GRACE = 5
 
 
 def _execute(params: RunParams) -> ResultFrame:
@@ -35,7 +39,18 @@ class TaskPool:
         return self._pool.schedule(fn, args=args)
 
     def run_action(self, params: RunParams) -> ResultFrame:
-        return self._pool.schedule(_execute, args=(params,)).result()
+        t = params.flags.timeout
+        future = self._pool.schedule(_execute, args=(params,),
+                                     timeout=(t + _TIMEOUT_GRACE) if t else None)
+        bind_future(future)   # so $/cancelRequest can kill this task's worker
+        try:
+            return future.result()
+        except CancelledError:
+            return ResultFrame(status="cancelled", changed=False,
+                               result={"msg": "task cancelled"})
+        except TimeoutError:  # pebble backstop: worker ignored the soft SIGALRM
+            return ResultFrame(status="timed_out", changed=False,
+                               result={"msg": "task hard-timed-out after %ds" % (t + _TIMEOUT_GRACE)})
 
     def prime(self) -> None:
         # Force the forkserver (and one worker) to start now, while the process is
