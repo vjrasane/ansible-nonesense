@@ -6,6 +6,7 @@ import threading
 from collections.abc import Callable
 from concurrent.futures import Future
 
+from .events import emit
 from .messages import Collection
 
 # Collection acquisition, server-owned (design §4.8.1). Lives in the ansible-free
@@ -48,6 +49,9 @@ class CollectionCache:
     def _install(self, coll: Collection) -> None:
         if self._present(coll.name, coll.version):
             return
+        token = "collection:%s" % coll.name
+        emit("progress", {"token": token, "phase": "begin", "kind": "collection",
+                          "name": coll.name, "version": coll.version})
         cmd = [self._galaxy, "collection", "install",
                "%s:%s" % (coll.name, coll.version), "-p", self._path]
         if coll.source:
@@ -55,10 +59,14 @@ class CollectionCache:
         run = self._run or subprocess.run
         proc = run(cmd, capture_output=True, text=True)
         if proc.returncode != 0:
+            emit("progress", {"token": token, "phase": "end", "kind": "collection",
+                              "ok": False})
             raise RuntimeError(
                 "ansible-galaxy install %s:%s failed:\n%s"
                 % (coll.name, coll.version, proc.stderr)
             )
+        emit("progress", {"token": token, "phase": "end", "kind": "collection",
+                          "ok": True})
 
     def _present(self, name: str, version: str) -> bool:
         ns, coll = name.split(".", 1)

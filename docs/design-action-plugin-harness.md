@@ -392,6 +392,16 @@ to a task.
   itself on reap**, so the client never leaks a forever-"open" id. Parent-side
   events (warmup, collection fetch, pool lifecycle) emit directly, no funnel.
 
+**Implemented (first cut).** `serve()` exposes a `notify()` closure over the single
+writer; `_handle` binds a per-request **emit context** (`events.py`: thread-local
+`notify` + originating `requestId`, alongside the cancellation token) so the
+ansible-free caches push events without a seam reference. The parent-side caches emit
+`progress` (token + `begin`/`end` + `requestId`): **collection fetch**
+(`CollectionCache._install`, token `collection:<name>`) and **fact gather**
+(`FactCache._gather`, token `facts:<host.id>:<subset>`). **Deferred:** child-side
+`connection/state` and the reap-synthesized terminal `close` (need the child→parent
+pipe, §4.4); pool-lifecycle events.
+
 Optional controls: a client-sent `setLogLevel` request lets the server filter
 server-side rather than flood the shared pipe; log `params` stay small, since
 chatty events on the same stream as results can delay a response.

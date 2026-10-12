@@ -6,6 +6,7 @@ from typing import BinaryIO
 
 import msgspec
 from .cancellation import Cancellation, set_current
+from .events import clear_emitter, set_emitter
 from .protocol import read_message, write_message
 
 Handlers = dict[str, tuple[type, Callable]]
@@ -33,6 +34,9 @@ def serve(in_stream: BinaryIO, out_stream: BinaryIO, handlers: Handlers | None =
         with write_lock:
             write_message(out_stream, obj)
 
+    def notify(method: str, params: dict) -> None:  # §4.5.1 server→client notification
+        write({"jsonrpc": "2.0", "method": method, "params": params})
+
     dispatch = ThreadPoolExecutor(max_workers=max_inflight)
     try:
         while True:
@@ -56,13 +60,14 @@ def serve(in_stream: BinaryIO, out_stream: BinaryIO, handlers: Handlers | None =
             token = Cancellation()
             with inflight_lock:
                 inflight[msg["id"]] = token
-            dispatch.submit(_handle, write, handlers, msg, token, inflight, inflight_lock)
+            dispatch.submit(_handle, write, notify, handlers, msg, token,
+                            inflight, inflight_lock)
     finally:
         dispatch.shutdown(wait=True)  # flush in-flight responses before returning
 
 
-def _handle(write: Callable, handlers: Handlers, msg: dict, token: Cancellation,
-            inflight: dict, inflight_lock: threading.Lock) -> None:
+def _handle(write: Callable, notify: Callable, handlers: Handlers, msg: dict,
+            token: Cancellation, inflight: dict, inflight_lock: threading.Lock) -> None:
     req_id = msg.get("id")
     try:
         entry = handlers.get(msg.get("method"))
@@ -75,7 +80,8 @@ def _handle(write: Callable, handlers: Handlers, msg: dict, token: Cancellation,
         except msgspec.ValidationError as exc:
             write(_error(req_id, -32602, "invalid params: %s" % exc))
             return
-        set_current(token)       # pool.run_action binds its future to this token
+        set_current(token)        # pool.run_action binds its future to this token
+        set_emitter(notify, req_id)  # caches emit §4.5.1 progress through the writer
         try:
             result = handler(params)
             write({"jsonrpc": "2.0", "id": req_id, "result": result})
@@ -83,6 +89,7 @@ def _handle(write: Callable, handlers: Handlers, msg: dict, token: Cancellation,
             write(_error(req_id, -32000, str(exc), traceback.format_exc()))
     finally:
         set_current(None)
+        clear_emitter()
         with inflight_lock:
             inflight.pop(req_id, None)
 

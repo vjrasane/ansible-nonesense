@@ -5,6 +5,7 @@ from concurrent.futures import Future
 import msgspec
 
 from .collections import CollectionCache
+from .events import emit
 from .messages import GatherFactsParams, HostSpec, ResultFrame, RunParams
 
 RunAction = Callable[[RunParams], ResultFrame]
@@ -53,14 +54,23 @@ class FactCache:
                 del self._futures[key]
 
     def _gather(self, host: HostSpec, task_vars: dict, subset: tuple[str, ...]) -> dict:
-        frame = self._run(RunParams(
-            host=HostSpec(connection=host.connection, become=host.become),
-            fqcn="ansible.builtin.setup",
-            args={"gather_subset": list(subset)},
-            vars=task_vars,
-        ))
+        token = "facts:%s:%s" % (host.id, ",".join(subset))
+        emit("progress", {"token": token, "phase": "begin", "kind": "facts",
+                          "host": host.id, "subset": list(subset)})
+        try:
+            frame = self._run(RunParams(
+                host=HostSpec(connection=host.connection, become=host.become),
+                fqcn="ansible.builtin.setup",
+                args={"gather_subset": list(subset)},
+                vars=task_vars,
+            ))
+        except BaseException:
+            emit("progress", {"token": token, "phase": "end", "kind": "facts", "ok": False})
+            raise
         if frame.status != "ok":
+            emit("progress", {"token": token, "phase": "end", "kind": "facts", "ok": False})
             raise RuntimeError("fact gather failed: %r" % (frame.result,))
+        emit("progress", {"token": token, "phase": "end", "kind": "facts", "ok": True})
         return frame.result["ansible_facts"]
 
 
