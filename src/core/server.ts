@@ -1,4 +1,5 @@
-import { spawn, type ChildProcess } from "node:child_process";
+import { execFile, spawn, type ChildProcess } from "node:child_process";
+import { promisify } from "node:util";
 import {
   createMessageConnection,
   type MessageConnection,
@@ -6,6 +7,29 @@ import {
   StreamMessageReader,
   StreamMessageWriter,
 } from "vscode-jsonrpc/node";
+
+const execFileAsync = promisify(execFile);
+
+export interface BootstrapOptions {
+  python?: string; // explicit interpreter; else the script discovers python3.13→3.11
+  env?: NodeJS.ProcessEnv; // controls XDG_DATA_HOME (where the venv lands)
+}
+
+// Provision the server runtime via the POSIX bootstrap script (design §4.8) and return
+// the venv python to spawn. Idempotent: a second call is a fast no-op. Retires the
+// `cwd: server/` sys.path hack — the package is now pip-installed into the venv.
+export async function bootstrap(
+  scriptPath: string,
+  opts: BootstrapOptions = {},
+): Promise<string> {
+  const args = opts.python ? [scriptPath, opts.python] : [scriptPath];
+  const { stdout } = await execFileAsync("sh", args, {
+    encoding: "utf8",
+    env: opts.env ?? process.env,
+  });
+  const lines = stdout.trim().split(/\r?\n/).filter(Boolean);
+  return lines[lines.length - 1]!; // last line = venv python path
+}
 
 export interface HostSpec {
   id?: string;
@@ -46,11 +70,12 @@ export class ServerClient {
   private readonly child: ChildProcess;
   private readonly conn: MessageConnection;
 
-  constructor(pythonPath: string, opts: { cwd?: string } = {}) {
+  constructor(pythonPath: string, opts: { cwd?: string; env?: NodeJS.ProcessEnv } = {}) {
     this.child = spawn(pythonPath, ["-m", "ansible_jsonrpc_server"], {
       // stderr inherited so server diagnostics surface; stdin/stdout are the seam.
       stdio: ["pipe", "pipe", "inherit"],
       cwd: opts.cwd,
+      env: opts.env,
     });
     this.conn = createMessageConnection(
       new StreamMessageReader(this.child.stdout!),

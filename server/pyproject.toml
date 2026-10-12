@@ -6,6 +6,9 @@ requires-python = ">=3.11"
 license = { text = "GPL-3.0-or-later" }
 dependencies = ["ansible-core==2.19.13", "msgspec>=0.18", "pebble>=5.0"]
 
+[project.scripts]
+ansible-jsonrpc-server = "ansible_jsonrpc_server.__main__:main"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

@@ -1,21 +1,26 @@
 import { afterAll, beforeAll, expect, test } from "vitest";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
-import { ServerClient } from "./server.ts";
+import { bootstrap, ServerClient } from "./server.ts";
 
-// Integration test: drives the real GPL server in the devenv venv.
-const python = path.resolve(process.cwd(), ".devenv/state/venv/bin/python");
-// Until the package is pip-installed into the venv (Plan 6), it resolves only via
-// cwd on sys.path — so run the child from server/.
-const serverDir = path.resolve(process.cwd(), "server");
+// Integration test: bootstrap a real isolated venv, then drive the server in it.
+const devenvPython = path.resolve(process.cwd(), ".devenv/state/venv/bin/python");
+const script = path.resolve(process.cwd(), "server/bootstrap/v1/bootstrap.sh");
+const xdg = mkdtempSync(path.join(tmpdir(), "ajs-bootstrap-"));
+const env = { ...process.env, XDG_DATA_HOME: xdg, XDG_CACHE_HOME: xdg };
 
 let client: ServerClient;
+let python: string;
 
-beforeAll(() => {
-  client = new ServerClient(python, { cwd: serverDir });
-});
+beforeAll(async () => {
+  python = await bootstrap(script, { python: devenvPython, env });
+  client = new ServerClient(python, { env }); // no cwd hack — package is pip-installed
+}, 120_000);
 
 afterAll(async () => {
   await client.close();
+  rmSync(xdg, { recursive: true, force: true });
 });
 
 test(

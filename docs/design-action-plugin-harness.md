@@ -508,6 +508,21 @@ The script (`bootstrap/vN/bootstrap.sh`):
    (`bootstrap/vN/…`, matched to a server version) or passed as `--version`.
 5. Done — the client spawns `$VENV/bin/python -m ansible_jsonrpc_server`.
 
+**Implemented (first cut, `bootstrap/v1/bootstrap.sh`).** POSIX `sh`, run as an
+idempotent preflight. Resolves the interpreter (`$1` override → discover
+`python3.13`→`python3.11`, assert ≥ 3.11), `flock`s a per-user lockfile, and — if
+`$VENV/bin/ansible-jsonrpc-server` is absent — builds the venv in a `.tmp.$$` sibling
+and `mv`s it into place (so an interrupted install never leaves a half-venv the
+idempotency check would accept), then prints `$VENV/bin/python` as the last stdout
+line. The TS side (`bootstrap()` in `server.ts`) runs it and spawns that python,
+retiring the `cwd: server/` sys.path hack. **Deviations from the target design, all
+deferred:** (a) the package is not on PyPI yet, so step 4 installs the **local source
+tree** (`$script_dir/../..`) instead of `ansible-jsonrpc-server==$VERSION`; (b) it uses
+the venv's bundled pip (plain `python -m venv`) rather than `--without-pip` + a pinned
+`get-pip.py`; (c) the script is run from the repo, not fetched + checksum-verified from
+a URL; (d) no npm-`postinstall` wiring or `--version` arg. Console entry point added:
+`[project.scripts] ansible-jsonrpc-server = "ansible_jsonrpc_server.__main__:main"`.
+
 Non-negotiables around the script:
 
 - **Pin + verify, not just "stable".** URLs are versioned
