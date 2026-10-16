@@ -78,6 +78,7 @@ function hermeticEnv(env?: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
 export class ServerClient {
   private readonly child: ChildProcess;
   private readonly conn: MessageConnection;
+  private inflight = 0;
 
   constructor(pythonPath: string, opts: { cwd?: string; env?: NodeJS.ProcessEnv } = {}) {
     this.child = spawn(pythonPath, ["-m", "ansible_jsonrpc_server"], {
@@ -94,15 +95,40 @@ export class ServerClient {
       new StreamMessageWriter(this.child.stdin!),
     );
     this.conn.listen();
+    // The server is a background helper: it must not hold node's event loop open. Unref
+    // the child + pipes so, once the caller's own work is done and no request is in
+    // flight, node exits (and teardown below + the server's lifeline reap it). ref() is
+    // re-applied per in-flight request so a pending call still keeps node alive.
+    this.child.unref();
+    this.setStreamsRef(false);
+  }
+
+  // child stdio are net.Socket at runtime (have ref/unref) but typed as Readable/Writable.
+  private setStreamsRef(on: boolean): void {
+    for (const s of [this.child.stdout, this.child.stdin] as unknown as Array<{
+      ref?(): void;
+      unref?(): void;
+    } | null>) {
+      if (on) s?.ref?.();
+      else s?.unref?.();
+    }
+  }
+
+  private async request<T>(method: string, params: object): Promise<T> {
+    if (this.inflight++ === 0) this.setStreamsRef(true);
+    try {
+      return await this.conn.sendRequest(method, ParameterStructures.byName, params);
+    } finally {
+      if (--this.inflight === 0) this.setStreamsRef(false);
+    }
   }
 
   runAction(params: RunActionParams): Promise<ResultFrame> {
-    // byName: send `params` as the object the server reads, not a positional array.
-    return this.conn.sendRequest("runAction", ParameterStructures.byName, params);
+    return this.request("runAction", params);
   }
 
   gatherFacts(params: GatherFactsParams): Promise<Facts> {
-    return this.conn.sendRequest("gatherFacts", ParameterStructures.byName, params);
+    return this.request("gatherFacts", params);
   }
 
   async close(): Promise<void> {
