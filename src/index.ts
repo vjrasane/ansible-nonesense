@@ -13,13 +13,6 @@ export {
   defineRemoteModule,
   type RemoteModuleSpec,
 } from "src/module/remote.ts";
-export { dispatchImpl, type DispatchRegistry } from "src/module/dispatch.ts";
-export {
-  defineActionModule,
-  copyAction,
-  fetchAction,
-  shellAction,
-} from "src/module/action.ts";
 
 import { currentHost as _currentHost } from "src/core/context.ts";
 export { host, type HostFacts, type HostRef } from "src/core/host.ts";
