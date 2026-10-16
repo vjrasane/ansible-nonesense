@@ -1,3 +1,5 @@
+import warnings
+
 import ansible.plugins.loader as loader
 from ansible.parsing.dataloader import DataLoader
 from ansible.playbook.play import Play
@@ -8,6 +10,12 @@ from ansible.template import Templar
 from ansible.plugins.action import ActionBase
 
 from .messages import Flags, HostSpec
+
+# build_execution calls init_plugin_loader each run (the forkserver preload already did
+# it once); ansible warns on the re-call but it's a no-op. Silence that specific noise.
+warnings.filterwarnings(
+    "ignore", message="AnsibleCollectionFinder has already been configured"
+)
 
 
 def build_execution(

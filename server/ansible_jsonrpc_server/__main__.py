@@ -28,6 +28,9 @@ def main() -> None:
     os.environ["ANSIBLE_COLLECTIONS_PATH"] = collections_path
     os.environ["ANSIBLE_HOME"] = ansible_home
     os.environ["ANSIBLE_LOCAL_TEMP"] = os.path.join(ansible_home, "tmp")
+    # Discover the target interpreter silently (we cache it anyway); the default "auto"
+    # prints a per-cold-host warning. A client-set interpreter still overrides this.
+    os.environ.setdefault("ANSIBLE_PYTHON_INTERPRETER", "auto_silent")
 
     # Orphan-prevention: own process group + SIGTERM/PR_SET_PDEATHSIG, armed while
     # single-threaded and before the pool so the forkserver/workers join the group.
