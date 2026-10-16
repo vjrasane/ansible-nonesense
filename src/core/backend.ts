@@ -57,6 +57,18 @@ export function getServer(): Promise<ServerClient> {
 // caller's own setup (reading secrets, etc.); the first module exec awaits this promise.
 getServer();
 
+// Fetch host facts from the server, which gathers via ansible's setup module and keeps
+// an in-memory per-host cache. gatherAll=false → the minimal subset; true → everything.
+export async function gatherFacts(
+  host: Host,
+  gatherAll = false,
+): Promise<Record<string, unknown>> {
+  const server = await getServer();
+  const spec = hostSpecFor(host);
+  spec.gather_subset = [gatherAll ? "all" : "min"];
+  return server.gatherFacts({ host: spec, vars: {} });
+}
+
 export function hostSpecFor(
   host: Host,
   become?: boolean | BecomeOpts,

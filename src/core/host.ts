@@ -7,29 +7,18 @@ import {
 } from "src/core/connection.ts";
 import { withContext } from "src/core/context.ts";
 import { Runner, defaultRunner } from "src/core/runner.ts";
-import { FACT_PROBE } from "./fact-probe.ts";
 
 type HostOpts = {
   pythonPath?: string;
 };
 
-export interface HostFacts {
-  ansible_service_mgr: string;
-  ansible_pkg_mgr: string;
-  ansible_system: string;
-  ansible_user_id: string;
-  ansible_user_dir: string;
-}
-
 export interface HostRef {
   readonly name: string;
-  readonly facts: Promise<HostFacts>;
   run<T>(fn: () => Promise<T>): Promise<T>;
 }
 
 export class Host implements HostRef {
   private pythonInterpreter: Promise<string> | null;
-  private ansibleFacts: Promise<HostFacts> | null = null;
 
   constructor(
     public readonly name: string,
@@ -42,11 +31,6 @@ export class Host implements HostRef {
 
   get runner(): Runner {
     return this._runner ?? defaultRunner;
-  }
-
-  get facts(): Promise<HostFacts> {
-    if (!this.ansibleFacts) this.ansibleFacts = this.discoverFacts();
-    return this.ansibleFacts;
   }
 
   get interpreter(): Promise<string> {
@@ -71,41 +55,6 @@ export class Host implements HostRef {
     if (rc !== 0 || !path)
       throw new Error(`Python interpreter not found on ${this.name}`);
     return path;
-  }
-
-  private async discoverFacts(): Promise<HostFacts> {
-    const { rc, stdout, stderr } = await this.connection.exec([
-      "/bin/sh",
-      "-c",
-      FACT_PROBE,
-    ]);
-    if (rc !== 0)
-      throw new Error(`fact probe failed on ${this.name}: rc=${rc} ${stderr}`);
-    const facts: Partial<HostFacts> = {};
-    for (const line of stdout.toString().trim().split("\n")) {
-      const i = line.indexOf("=");
-      const key = line.slice(0, i);
-      const value = line.slice(i + 1);
-      switch (key) {
-        case "service_mgr":
-          facts.ansible_service_mgr = value;
-          break;
-        case "pkg_mgr":
-          facts.ansible_pkg_mgr = value;
-          break;
-        case "system":
-          facts.ansible_system = value;
-          break;
-        case "user":
-          facts.ansible_user_id = value;
-          break;
-        case "user_dir":
-          facts.ansible_user_dir = value;
-          break;
-      }
-    }
-
-    return facts as HostFacts;
   }
 
   run<T>(fn: () => Promise<T>): Promise<T> {

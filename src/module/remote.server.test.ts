@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { host, localhost, type Host } from "src/core/host.ts";
-import { getServer, hostSpecFor } from "src/core/backend.ts";
+import { getServer, gatherFacts, hostSpecFor } from "src/core/backend.ts";
 import { defineRemoteModule, type RemoteModuleSpec } from "src/module/remote.ts";
 import type { AnsibleModuleMeta } from "src/module/module.ts";
 
@@ -78,6 +78,12 @@ test("command echo → changed + stdout", async () => {
   const res = await localhost.run(() => command({ cmd: "echo hi" }));
   expect(res.status).toBe("changed");
   expect(res.stdout).toBe("hi");
+}, 30_000);
+
+test("gatherFacts (min) returns facts incl. ansible_user_id/ansible_user_dir", async () => {
+  const f = await gatherFacts(localhost, false);
+  expect(f.ansible_user_id).toBeDefined();
+  expect(f.ansible_user_dir).toBeDefined();
 }, 30_000);
 
 test("copy (action plugin) writes a file", async () => {
