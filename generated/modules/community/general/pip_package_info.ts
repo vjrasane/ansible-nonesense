@@ -157,6 +157,7 @@ const spec: RemoteModuleSpec = {
     "ansible_collections/community/general/plugins/__init__.py",
     "ansible_collections/community/general/plugins/modules/__init__.py",
   ],
+  collection: { "name": "community.general", "version": "13.5.0" },
 } as const;
 export interface PipPackageInfoArgs {
   /** A list of the pip executables that are used to get the packages. They can be supplied with the full path or just the executable name, for example V(pip3.7). */

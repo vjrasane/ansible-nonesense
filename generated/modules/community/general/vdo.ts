@@ -78,6 +78,7 @@ const spec: RemoteModuleSpec = {
     "ansible_collections/community/general/plugins/__init__.py",
     "ansible_collections/community/general/plugins/modules/__init__.py",
   ],
+  collection: { "name": "community.general", "version": "13.5.0" },
 } as const;
 export interface VdoArgs {
   /** Specifies the number of threads to use for acknowledging completion of requested VDO I/O operations. Valid values are integer values from V(1) to V(100) (lower numbers are preferable due to overhead). The default is V(1). Existing volumes maintain their previously configured setting unless a different value is specified in the playbook. */

@@ -78,6 +78,7 @@ const spec: RemoteModuleSpec = {
     "ansible_collections/community/docker/plugins/__init__.py",
     "ansible_collections/community/docker/plugins/modules/__init__.py",
   ],
+  collection: { "name": "community.docker", "version": "5.4.0" },
 } as const;
 export type CurrentContainerFactsArgs = Record<string, unknown>;
 

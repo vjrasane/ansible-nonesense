@@ -83,6 +83,7 @@ const spec: RemoteModuleSpec = {
     "ansible_collections/community/general/plugins/module_utils/__init__.py",
     "ansible_collections/community/general/plugins/modules/__init__.py",
   ],
+  collection: { "name": "community.general", "version": "13.5.0" },
 } as const;
 export interface ConsulAgentServiceArgs {
   /** The address to advertise that the service listens on. This value is passed as the C(address) parameter to Consul's C(/v1/agent/service/register) API method, so refer to the Consul API documentation for further details. */

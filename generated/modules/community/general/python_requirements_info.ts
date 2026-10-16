@@ -83,6 +83,7 @@ const spec: RemoteModuleSpec = {
     "ansible_collections/community/general/plugins/module_utils/__init__.py",
     "ansible_collections/community/general/plugins/modules/__init__.py",
   ],
+  collection: { "name": "community.general", "version": "13.5.0" },
 } as const;
 export interface PythonRequirementsInfoArgs {
   /** A list of version-likes or module names to check for installation. Supported operators: C(<), C(>), C(<=), C(>=), or C(==). */

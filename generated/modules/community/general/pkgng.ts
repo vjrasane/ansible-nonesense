@@ -78,6 +78,7 @@ const spec: RemoteModuleSpec = {
     "ansible_collections/community/general/plugins/__init__.py",
     "ansible_collections/community/general/plugins/modules/__init__.py",
   ],
+  collection: { "name": "community.general", "version": "13.5.0" },
 } as const;
 export interface PkgngArgs {
   /** A list of keyvalue-pairs of the form C(<+/-/:><key>[=<value>]). A V(+) denotes adding an annotation, a V(-) denotes removing an annotation, and V(:) denotes modifying an annotation. If setting or modifying annotations, a value must be provided. */

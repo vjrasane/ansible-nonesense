@@ -87,6 +87,7 @@ const spec: RemoteModuleSpec = {
     "ansible_collections/community/general/plugins/module_utils/__init__.py",
     "ansible_collections/community/general/plugins/modules/__init__.py",
   ],
+  collection: { "name": "community.general", "version": "13.5.0" },
 } as const;
 export interface LvmPvMoveDataArgs {
   /** Makes the C(pvmove) operation atomic, ensuring that all affected LVs are moved to the destination PV, or none are if the operation is aborted. */

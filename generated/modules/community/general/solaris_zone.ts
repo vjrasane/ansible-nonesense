@@ -78,6 +78,7 @@ const spec: RemoteModuleSpec = {
     "ansible_collections/community/general/plugins/__init__.py",
     "ansible_collections/community/general/plugins/modules/__init__.py",
   ],
+  collection: { "name": "community.general", "version": "13.5.0" },
 } as const;
 export interface SolarisZoneArgs {
   /** Extra options to the zoneadm attach command. For example, this can be used to specify whether a minimum or full update of packages is required and if any packages need to be deleted. For valid values, see zoneadm(1M). */

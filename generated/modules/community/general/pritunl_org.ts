@@ -81,6 +81,7 @@ const spec: RemoteModuleSpec = {
     "ansible_collections/community/general/plugins/module_utils/__init__.py",
     "ansible_collections/community/general/plugins/modules/__init__.py",
   ],
+  collection: { "name": "community.general", "version": "13.5.0" },
 } as const;
 export interface PritunlOrgArgs {
   /** If O(force) is V(true) and O(state) is V(absent), the module deletes the organization, no matter if it contains users or not. By default O(force) is V(false), which causes the module to fail the deletion of the organization when it contains users. */

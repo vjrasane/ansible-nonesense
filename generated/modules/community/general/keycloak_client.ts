@@ -87,6 +87,7 @@ const spec: RemoteModuleSpec = {
     "ansible_collections/community/general/plugins/module_utils/__init__.py",
     "ansible_collections/community/general/plugins/modules/__init__.py",
   ],
+  collection: { "name": "community.general", "version": "13.5.0" },
 } as const;
 export interface KeycloakClientArgs {
   /** URL to the admin interface of the client. This is C(adminUrl) in the Keycloak REST API. */

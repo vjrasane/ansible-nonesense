@@ -78,6 +78,7 @@ const spec: RemoteModuleSpec = {
     "ansible_collections/community/general/plugins/__init__.py",
     "ansible_collections/community/general/plugins/modules/__init__.py",
   ],
+  collection: { "name": "community.general", "version": "13.5.0" },
 } as const;
 export interface PamLimitsArgs {
   /** Create a backup file including the timestamp information so you can get the original file back if you somehow clobbered it incorrectly. */

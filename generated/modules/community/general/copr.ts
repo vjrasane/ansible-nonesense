@@ -82,6 +82,7 @@ const spec: RemoteModuleSpec = {
     "ansible_collections/community/general/plugins/__init__.py",
     "ansible_collections/community/general/plugins/modules/__init__.py",
   ],
+  collection: { "name": "community.general", "version": "13.5.0" },
 } as const;
 export interface CoprArgs {
   /** The name of the chroot that you want to enable/disable/remove in the project, for example V(epel-7-x86_64). Default chroot is determined by the operating system, version of the operating system, and architecture on which the module is run. */

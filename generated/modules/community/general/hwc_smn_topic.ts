@@ -79,6 +79,7 @@ const spec: RemoteModuleSpec = {
     "ansible_collections/community/general/plugins/module_utils/__init__.py",
     "ansible_collections/community/general/plugins/modules/__init__.py",
   ],
+  collection: { "name": "community.general", "version": "13.5.0" },
 } as const;
 export interface HwcSmnTopicArgs {
   /** Topic display name, which is presented as the name of the email sender in an email message. The topic display name contains a maximum of 192 bytes. */

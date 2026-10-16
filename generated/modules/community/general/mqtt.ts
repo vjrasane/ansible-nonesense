@@ -78,6 +78,7 @@ const spec: RemoteModuleSpec = {
     "ansible_collections/community/general/plugins/__init__.py",
     "ansible_collections/community/general/plugins/modules/__init__.py",
   ],
+  collection: { "name": "community.general", "version": "13.5.0" },
 } as const;
 export interface MqttArgs {
   /** The path to the Certificate Authority certificate files that are to be treated as trusted by this client. If this is the only option given then the client operates in a similar manner to a web browser. That is to say it requires the broker to have a certificate signed by the Certificate Authorities in ca_certs and communicates using TLS v1, but does not attempt any form of authentication. This provides basic network encryption but may not be sufficient depending on how the broker is configured. */

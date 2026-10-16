@@ -80,6 +80,7 @@ const spec: RemoteModuleSpec = {
     "ansible_collections/community/general/plugins/module_utils/__init__.py",
     "ansible_collections/community/general/plugins/modules/__init__.py",
   ],
+  collection: { "name": "community.general", "version": "13.5.0" },
 } as const;
 export interface OneVmArgs {
   /** Password of the user to login into OpenNebula RPC server. If not set then the value of the E(ONE_PASSWORD) environment variable is used. if both O(api_username) or O(api_password) are not set, then it tries to authenticate with ONE auth file. Default path is C(~/.one/one_auth). */

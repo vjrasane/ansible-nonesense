@@ -78,6 +78,7 @@ const spec: RemoteModuleSpec = {
     "ansible_collections/community/general/plugins/__init__.py",
     "ansible_collections/community/general/plugins/modules/__init__.py",
   ],
+  collection: { "name": "community.general", "version": "13.5.0" },
 } as const;
 export interface CronvarArgs {
   /** If set, create a backup of the crontab before it is modified. The location of the backup is returned in the C(backup) variable by this module. */

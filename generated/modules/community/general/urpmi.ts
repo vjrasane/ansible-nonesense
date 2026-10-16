@@ -78,6 +78,7 @@ const spec: RemoteModuleSpec = {
     "ansible_collections/community/general/plugins/__init__.py",
     "ansible_collections/community/general/plugins/modules/__init__.py",
   ],
+  collection: { "name": "community.general", "version": "13.5.0" },
 } as const;
 export interface UrpmiArgs {
   /** Assume "yes" is the answer to any question urpmi has to ask. Corresponds to the C(--force) option for C(urpmi). */

@@ -80,6 +80,7 @@ const spec: RemoteModuleSpec = {
     "ansible_collections/community/general/plugins/module_utils/__init__.py",
     "ansible_collections/community/general/plugins/modules/__init__.py",
   ],
+  collection: { "name": "community.general", "version": "13.5.0" },
 } as const;
 export interface LinodeV4Args {
   /** The Linode API v4 access token. It may also be specified by exposing the E(LINODE_ACCESS_TOKEN) environment variable. */

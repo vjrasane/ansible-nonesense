@@ -78,6 +78,7 @@ const spec: RemoteModuleSpec = {
     "ansible_collections/community/general/plugins/__init__.py",
     "ansible_collections/community/general/plugins/modules/__init__.py",
   ],
+  collection: { "name": "community.general", "version": "13.5.0" },
 } as const;
 export interface IrcArgs {
   /** Channel name. One of O(nick_to) or O(channel) needs to be set. When both are set, the message is sent to both of them. */

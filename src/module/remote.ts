@@ -27,6 +27,9 @@ export interface RemoteModuleSpec {
   sources: ArtifactFiles[];
   scaffold: ScaffoldFile[];
   markers: string[];
+  // The owning collection + pinned version, for the server to install before running.
+  // Absent for ansible.builtin (ships with ansible-core).
+  collection?: { name: string; version: string };
 }
 
 export class RemoteModule<

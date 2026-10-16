@@ -78,6 +78,7 @@ const spec: RemoteModuleSpec = {
     "ansible_collections/community/general/plugins/__init__.py",
     "ansible_collections/community/general/plugins/modules/__init__.py",
   ],
+  collection: { "name": "community.general", "version": "13.5.0" },
 } as const;
 export interface BundlerArgs {
   /** Only applies if O(state=present). Specifies the directory to install any gem bins files to. When executed the bin files run within the context of the Gemfile and fail if any required gem dependencies are not installed. If O(chdir) is set then this path is relative to O(chdir). */

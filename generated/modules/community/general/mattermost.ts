@@ -79,6 +79,7 @@ const spec: RemoteModuleSpec = {
     "ansible_collections/community/general/plugins/__init__.py",
     "ansible_collections/community/general/plugins/modules/__init__.py",
   ],
+  collection: { "name": "community.general", "version": "13.5.0" },
 } as const;
 export interface MattermostArgs {
   /** Mattermost webhook API key. Log into your Mattermost site, go to Menu -> Integration -> Incoming Webhook -> Add Incoming Webhook. This gives you a full URL. O(api_key) is the last part. U(http://mattermost.example.com/hooks/API_KEY). */

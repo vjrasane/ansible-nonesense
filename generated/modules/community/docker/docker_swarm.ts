@@ -120,6 +120,7 @@ const spec: RemoteModuleSpec = {
     "ansible_collections/community/docker/plugins/module_utils/_api/utils/__init__.py",
     "ansible_collections/community/docker/plugins/modules/__init__.py",
   ],
+  collection: { "name": "community.docker", "version": "5.4.0" },
 } as const;
 export interface DockerSwarmArgs {
   /** Externally reachable address advertised to other nodes. */

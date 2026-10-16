@@ -118,6 +118,7 @@ const spec: RemoteModuleSpec = {
     "ansible_collections/community/docker/plugins/module_utils/_api/utils/__init__.py",
     "ansible_collections/community/docker/plugins/modules/__init__.py",
   ],
+  collection: { "name": "community.docker", "version": "5.4.0" },
 } as const;
 export interface DockerStackArgs {
   /** If larger than V(0) and O(state=absent) the module will retry up to O(absent_retries) times to delete the stack until all the resources have been effectively deleted. If the last try still reports the stack as not completely removed the module will fail. */

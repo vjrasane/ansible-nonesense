@@ -88,6 +88,7 @@ const spec: RemoteModuleSpec = {
     "ansible_collections/community/general/plugins/module_utils/__init__.py",
     "ansible_collections/community/general/plugins/modules/__init__.py",
   ],
+  collection: { "name": "community.general", "version": "13.5.0" },
 } as const;
 export interface LxcContainerArgs {
   /** When set to V(true) the system attempts to create a compressed tarball of the running container. The O(archive) option supports LVM backed containers and creates a snapshot of the running container when creating the archive. */

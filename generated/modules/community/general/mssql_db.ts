@@ -78,6 +78,7 @@ const spec: RemoteModuleSpec = {
     "ansible_collections/community/general/plugins/__init__.py",
     "ansible_collections/community/general/plugins/modules/__init__.py",
   ],
+  collection: { "name": "community.general", "version": "13.5.0" },
 } as const;
 export interface MssqlDbArgs {
   /** Automatically commit the change only if the import succeed. Sometimes it is necessary to use autocommit=true, since some content can not be changed within a transaction. */

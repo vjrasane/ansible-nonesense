@@ -78,6 +78,7 @@ const spec: RemoteModuleSpec = {
     "ansible_collections/community/general/plugins/__init__.py",
     "ansible_collections/community/general/plugins/modules/__init__.py",
   ],
+  collection: { "name": "community.general", "version": "13.5.0" },
 } as const;
 export interface SvcArgs {
   /** Should a C(down) file exist or not, if it exists it disables auto startup. Defaults to V(false). Downed does not imply stopped. */

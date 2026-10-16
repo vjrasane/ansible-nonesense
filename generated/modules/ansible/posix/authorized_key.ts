@@ -79,6 +79,7 @@ const spec: RemoteModuleSpec = {
     "ansible_collections/ansible/posix/plugins/__init__.py",
     "ansible_collections/ansible/posix/plugins/modules/__init__.py",
   ],
+  collection: { "name": "ansible.posix", "version": "2.2.2" },
 } as const;
 export interface AuthorizedKeyArgs {
   /** Change the comment on the public key. */

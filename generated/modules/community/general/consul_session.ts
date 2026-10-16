@@ -80,6 +80,7 @@ const spec: RemoteModuleSpec = {
     "ansible_collections/community/general/plugins/module_utils/__init__.py",
     "ansible_collections/community/general/plugins/modules/__init__.py",
   ],
+  collection: { "name": "community.general", "version": "13.5.0" },
 } as const;
 export interface ConsulSessionArgs {
   /** The optional behavior that can be attached to the session when it is created. This controls the behavior when a session is invalidated. */

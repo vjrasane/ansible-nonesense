@@ -83,6 +83,7 @@ const spec: RemoteModuleSpec = {
     "ansible_collections/community/general/plugins/module_utils/__init__.py",
     "ansible_collections/community/general/plugins/modules/__init__.py",
   ],
+  collection: { "name": "community.general", "version": "13.5.0" },
 } as const;
 export interface UtmCaHostKeyCertArgs {
   /** A reference to an existing utm_ca_signing_ca or utm_ca_verification_ca object. */

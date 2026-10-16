@@ -84,6 +84,7 @@ const spec: RemoteModuleSpec = {
     "ansible_collections/community/general/plugins/module_utils/__init__.py",
     "ansible_collections/community/general/plugins/modules/__init__.py",
   ],
+  collection: { "name": "community.general", "version": "13.5.0" },
 } as const;
 export interface ZypperRepositoryArgs {
   /** Automatically import the gpg signing key of the new or changed repository. */

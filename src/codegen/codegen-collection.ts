@@ -36,7 +36,7 @@ async function main() {
 
     const dir = outDir(collection);
     await mkdir(dir, { recursive: true });
-    const files = emitCollection(result);
+    const files = emitCollection(result, { name: collection, version });
     await Promise.all(
       [...files].map(([name, src]) => writeFile(path.join(dir, name), src)),
     );

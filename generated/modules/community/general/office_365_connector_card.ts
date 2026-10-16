@@ -80,6 +80,7 @@ const spec: RemoteModuleSpec = {
     "ansible_collections/community/general/plugins/__init__.py",
     "ansible_collections/community/general/plugins/modules/__init__.py",
   ],
+  collection: { "name": "community.general", "version": "13.5.0" },
 } as const;
 export interface Office365ConnectorCardArgs {
   /** This array of objects is used to power the action links found at the bottom of the card. */

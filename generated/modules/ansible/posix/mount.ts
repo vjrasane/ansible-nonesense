@@ -79,6 +79,7 @@ const spec: RemoteModuleSpec = {
     "ansible_collections/ansible/posix/plugins/module_utils/__init__.py",
     "ansible_collections/ansible/posix/plugins/modules/__init__.py",
   ],
+  collection: { "name": "ansible.posix", "version": "2.2.2" },
 } as const;
 export interface MountArgs {
   /** Create a backup file including the timestamp information so you can get the original file back if you somehow clobbered it incorrectly. */

@@ -96,6 +96,7 @@ const spec: RemoteModuleSpec = {
     "ansible_collections/community/general/plugins/module_utils/_mh/mixins/__init__.py",
     "ansible_collections/community/general/plugins/modules/__init__.py",
   ],
+  collection: { "name": "community.general", "version": "13.5.0" },
 } as const;
 export interface JiraArgs {
   /** Sets the account identifier for the assignee when O(operation) is V(create), V(transition), or V(edit). */

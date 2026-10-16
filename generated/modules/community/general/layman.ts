@@ -79,6 +79,7 @@ const spec: RemoteModuleSpec = {
     "ansible_collections/community/general/plugins/__init__.py",
     "ansible_collections/community/general/plugins/modules/__init__.py",
   ],
+  collection: { "name": "community.general", "version": "13.5.0" },
 } as const;
 export interface LaymanArgs {
   /** An URL of the alternative overlays list that defines the overlay to install. This list is fetched and saved under C(${overlay_defs}/${name}.xml), where C(overlay_defs) is read from the Layman's configuration. */

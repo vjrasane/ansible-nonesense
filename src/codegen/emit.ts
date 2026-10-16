@@ -39,6 +39,12 @@ export interface ModuleGen {
   markers: string[]; // empty __init__.py package markers
 }
 
+/** The owning collection + pinned version, stamped onto every module of a run. */
+export interface CollectionPin {
+  name: string;
+  version: string;
+}
+
 /** Full process_module.py output: run-level scaffold + per-module records. */
 export interface CodegenResult {
   scaffold: ScaffoldFile[]; // the 2 core stubs, shared by every module
@@ -255,17 +261,22 @@ function emitMeta(m: ModuleGen): Code {
   return code`const meta: ${AnsibleModuleMeta} = ${JSON.stringify(m.meta)} as const;`;
 }
 
-function emitRemoteSpec(m: ModuleGen): Code {
+function emitRemoteSpec(m: ModuleGen, collection?: CollectionPin): Code {
   const groups = m.sources.map((s) => {
     const sym = imp(`${artifactConst(s.artifact.id)}@${ARTIFACTS_MODULE}`);
     return code`{ artifact: ${sym}, files: ${JSON.stringify(s.files)} }`;
   });
+  // The pinned collection the server installs before running; omitted for core.
+  const collectionLine = collection
+    ? code`
+  collection: ${JSON.stringify(collection)},`
+    : code``;
   return code`const spec: ${RemoteModuleSpec} = {
   fqcn: ${JSON.stringify(m.fqcn)},
   moduleFqn: ${JSON.stringify(m.moduleFqn)},
   sources: [${joinCode(groups, { on: ", " })}],
   scaffold: ${coreScaffold},
-  markers: ${JSON.stringify(m.markers)},
+  markers: ${JSON.stringify(m.markers)},${collectionLine}
 } as const;`;
 }
 
@@ -284,7 +295,7 @@ function emitArtifacts(
   return `// Auto-generated — DO NOT EDIT\n\n${joinCode(decls, { on: "\n" }).toString()}\n`;
 }
 
-function emitModule(m: ModuleGen): Code {
+function emitModule(m: ModuleGen, collection?: CollectionPin): Code {
   const short = shortName(m.fqcn);
   const fn = safeBinding(short);
   const Args = `${pascal(short)}Args`;
@@ -294,7 +305,7 @@ function emitModule(m: ModuleGen): Code {
   return code`
 ${preamble(m.fqcn)}
 ${emitMeta(m)}
-${emitRemoteSpec(m)}
+${emitRemoteSpec(m, collection)}
 ${types}
 export const ${fn} = ${defineRemoteModule}<${Args}, ${Return}>(spec, meta);
 `;
@@ -303,7 +314,10 @@ export const ${fn} = ${defineRemoteModule}<${Args}, ${Return}>(spec, meta);
 // --- public API -----------------------------------------------------------
 
 /** Render a collection's modules to a filename → source map (modules, shared artifacts, barrel). */
-export function emitCollection(result: CodegenResult): Map<string, string> {
+export function emitCollection(
+  result: CodegenResult,
+  collection?: CollectionPin,
+): Map<string, string> {
   const out = new Map<string, string>();
   const emitted: ModuleGen[] = [];
   const unexpected: string[] = [];
@@ -317,7 +331,7 @@ export function emitCollection(result: CodegenResult): Map<string, string> {
       unexpected.push(m.fqcn);
       continue;
     }
-    out.set(`${shortName(m.fqcn)}.ts`, emitModule(m).toString());
+    out.set(`${shortName(m.fqcn)}.ts`, emitModule(m, collection).toString());
     emitted.push(m);
     console.error(`  emit  ${kind.padEnd(10)} ${m.fqcn}`);
   }
