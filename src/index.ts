@@ -27,3 +27,14 @@ import type { HostRef } from "src/core/host.ts";
 export const currentHost = (): HostRef => _currentHost();
 export { setEventHandler } from "src/core/events.ts";
 export { setLogger, logReporter, withLevel } from "src/core/logger.ts";
+export {
+  bootstrap,
+  ServerClient,
+  type BootstrapOptions,
+  type HostSpec,
+  type GatherFactsParams,
+  type Facts,
+  type RunActionParams,
+  type ActionStatus,
+  type ResultFrame,
+} from "src/core/server.ts";
