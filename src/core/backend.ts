@@ -61,7 +61,7 @@ getServer();
 export async function gatherFacts(
   host: Host,
   gatherAll = false,
-): Promise<Record<string, unknown>> {
+): Promise<Record<string, any>> {
   const server = await getServer();
   const spec = hostSpecFor(host);
   spec.gather_subset = [gatherAll ? "all" : "min"];
