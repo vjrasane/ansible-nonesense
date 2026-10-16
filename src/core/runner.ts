@@ -1,5 +1,6 @@
 import { withOptions } from "src/core/context.ts";
-import { host, HostConfig, HostRef } from "src/core/host.ts";
+import { host, HostRef } from "src/core/host.ts";
+import type { SSHConfig } from "src/core/connection.ts";
 import { ModuleExecOpts } from "src/module/module.ts";
 import { FatalError } from "./errors.ts";
 import {
@@ -33,7 +34,7 @@ export class Runner {
     });
   }
 
-  host(name: string, cfg?: HostConfig): HostRef {
+  host(name: string, cfg?: Partial<SSHConfig>): HostRef {
     return host(name, cfg, this);
   }
 

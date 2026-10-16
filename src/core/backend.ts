@@ -2,7 +2,6 @@ import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { BecomeOpts } from "src/core/connection.ts";
-import { LocalConnection, SSHConnection } from "src/core/connection.ts";
 import type { Host } from "src/core/host.ts";
 import { bootstrap, ServerClient, type HostSpec } from "src/core/server.ts";
 
@@ -75,19 +74,14 @@ export function hostSpecFor(
 ): HostSpec {
   const become_vars = becomeVars(become);
   const conn = host.connection;
-  if (conn instanceof LocalConnection)
+  if (conn.type === "local")
     return { id: host.name, connection: { type: "local" }, become: become_vars };
-  if (conn instanceof SSHConnection) {
-    const cfg = conn.config;  // host already defaulted to the name by host()
-    const vars: Record<string, unknown> = { ansible_host: cfg.host };
-    if (cfg.user != null) vars.ansible_user = cfg.user;
-    if (cfg.port != null) vars.ansible_port = cfg.port;
-    if (cfg.identityFile != null) vars.ansible_ssh_private_key_file = cfg.identityFile;
-    return { id: host.name, connection: { type: "ssh", vars }, become: become_vars };
-  }
-  throw new Error(
-    `server backend: unsupported connection for host "${host.name}"`,
-  );
+  const cfg = conn.config;  // host already defaulted to the name by host()
+  const vars: Record<string, unknown> = { ansible_host: cfg.host };
+  if (cfg.user != null) vars.ansible_user = cfg.user;
+  if (cfg.port != null) vars.ansible_port = cfg.port;
+  if (cfg.identityFile != null) vars.ansible_ssh_private_key_file = cfg.identityFile;
+  return { id: host.name, connection: { type: "ssh", vars }, become: become_vars };
 }
 
 function becomeVars(become?: boolean | BecomeOpts): Record<string, unknown> {
