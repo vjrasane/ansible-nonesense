@@ -74,22 +74,42 @@ class FactCache:
         return frame.result["ansible_facts"]
 
 
+def _discovered_interpreter(frame: ResultFrame) -> str | None:
+    facts = frame.result.get("ansible_facts") if isinstance(frame.result, dict) else None
+    value = facts.get("discovered_interpreter_python") if isinstance(facts, dict) else None
+    return value if isinstance(value, str) else None
+
+
 def make_handlers(run_action: RunAction, collections_path: str) -> dict[str, tuple[type, Callable]]:
     """Build the JSON-RPC method handlers that wrap execution with collection + fact
     provisioning. `run_action(params: RunParams) -> ResultFrame` is the pool's executor."""
     facts = FactCache(run_action)
     collections = CollectionCache(collections_path)
+    # Per-host interpreter cache: ansible discovers the interpreter on a cold task and
+    # returns it as discovered_interpreter_python; every task is a fresh worker with no
+    # memory, so we cache it parent-side and reinject it to avoid re-discovery each task.
+    interpreters: dict[str, str] = {}
 
     def run(params: RunParams) -> ResultFrame:
         if params.collection is not None:
             collections.ensure(params.collection)   # install before the worker runs
         host = params.host
+        vars = params.vars
         if host.gather_subset is not None:
-            gathered = facts.ensure(host, params.vars)
+            gathered = facts.ensure(host, vars)
             # ansible exposes facts both namespaced and flattened as top-level vars
-            merged = {**params.vars, "ansible_facts": gathered, **gathered}
-            params = msgspec.structs.replace(params, vars=merged)
-        return run_action(params)
+            vars = {**vars, "ansible_facts": gathered, **gathered}
+        if ("ansible_python_interpreter" not in vars
+                and host.id is not None and host.id in interpreters):
+            vars = {**vars, "ansible_python_interpreter": interpreters[host.id]}
+        if vars is not params.vars:
+            params = msgspec.structs.replace(params, vars=vars)
+        frame = run_action(params)
+        if host.id is not None:
+            discovered = _discovered_interpreter(frame)
+            if discovered:
+                interpreters[host.id] = discovered
+        return frame
 
     def gather(params: GatherFactsParams) -> dict:
         return facts.ensure(params.host, params.vars)

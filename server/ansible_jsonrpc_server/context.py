@@ -16,6 +16,12 @@ def build_execution(
     loader.init_plugin_loader()
     dl = DataLoader()
 
+    # Ensure an ansible_facts dict exists: ansible's interpreter discovery runs fine on
+    # its own, but writes the discovered interpreter back into task_vars['ansible_facts']
+    # (action/__init__.py) — a direct subscript that KeyErrors if the key is absent. With
+    # it seeded, discovery is implicit and needs no client-supplied interpreter.
+    task_vars = {**task_vars, "ansible_facts": dict(task_vars.get("ansible_facts") or {})}
+
     play = Play.load({}, variable_manager=None, loader=dl)
     block = Block(play=play)
     task = Task.load(

@@ -73,8 +73,9 @@ export class RemoteModule<
       host: hostSpecFor(ctx.host, mergedOpts.become),
       fqcn: this.meta.fqcn,
       args: a,
-      // Pass the interpreter so ansible skips discovery (which needs gathered facts).
-      vars: { ansible_python_interpreter: await ctx.host.interpreter },
+      // No interpreter passed: the server runs ansible's own discovery and caches the
+      // result per host (so it's a one-time cost, not per task).
+      vars: {},
       flags: {
         check_mode: mergedOpts.check ?? false,
         diff: mergedOpts.diff ?? false,

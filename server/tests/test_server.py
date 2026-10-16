@@ -37,6 +37,18 @@ def test_run_action_request_gets_result():
     assert out[1]["result"]["result"]["ping"] == "pong"
 
 
+def test_run_action_without_interpreter_discovers_it():
+    # No ansible_python_interpreter and no gather: the server seeds ansible_facts so
+    # ansible's own interpreter discovery runs instead of KeyError'ing.
+    out = _drive([
+        {"jsonrpc": "2.0", "id": 1, "method": "runAction",
+         "params": {"host": LOCAL, "fqcn": "ansible.builtin.ping", "args": {}, "vars": {}}},
+        {"jsonrpc": "2.0", "method": "shutdown"},
+    ])
+    assert out[1]["result"]["status"] == "ok"
+    assert out[1]["result"]["result"]["ping"] == "pong"
+
+
 def test_unknown_method_is_jsonrpc_error_and_survives():
     out = _drive([
         {"jsonrpc": "2.0", "id": 1, "method": "nope", "params": {}},
