@@ -3,6 +3,7 @@ import signal
 from ansible.errors import AnsibleError
 from .context import build_execution
 from .messages import ResultFrame, RunParams
+from .reap import install_sigterm_reaper, kill_descendants, uninstall_sigterm_reaper
 from .result import shape_result, status_from_exception
 
 
@@ -27,9 +28,14 @@ def run_action(params: RunParams) -> ResultFrame:
     prev = signal.signal(signal.SIGALRM, _on_alarm) if timeout else None
     if timeout:
         signal.alarm(timeout)
+    # A cancel or hard timeout arrives as pebble's SIGTERM while we block in plugin.run;
+    # reap the module subtree before the worker dies (§4.10). Scoped to the run, so a
+    # clean completion's worker recycle never reaps.
+    install_sigterm_reaper()
     try:
         raw = plugin.run(task_vars=task_vars)
     except _Timeout:
+        kill_descendants()   # soft timeout: the module subprocess is still running
         return ResultFrame(status="timed_out", changed=False,
                            result={"msg": "task timed out after %ds" % timeout})
     except AnsibleError as exc:               # task-level failures: map, don't raise
@@ -41,4 +47,5 @@ def run_action(params: RunParams) -> ResultFrame:
         if timeout:
             signal.alarm(0)
             signal.signal(signal.SIGALRM, prev)
+        uninstall_sigterm_reaper()
     return shape_result(raw, no_log)

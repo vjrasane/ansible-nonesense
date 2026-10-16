@@ -698,12 +698,25 @@ proper result frame, and a pebble hard-kill backstop for a worker that won't yie
   the only reliable abort; already-applied remote side effects are not rolled back (as
   in ansible).
 
-> **Known limitation.** pebble kills the **worker PID**, not its process group, so a
-> module's own child processes (an `ssh`/`ControlMaster`, a shelled-out command) can be
-> **orphaned** on timeout/cancel rather than reaped. The §4.6 lifeline still tree-kills
-> everything on server exit, so orphans cannot outlive the server — but mid-session they
-> leak until then. Moving workers to their own process groups and `killpg`-ing on
-> cancel is the fix; deferred.
+**Reaping the interrupted task's subtree.** Killing the worker PID alone would leave the
+module's own children (a `command: sleep`, a shelled-out process) running in the server's
+process group until teardown — a mid-session leak. The worker therefore **reaps its own
+descendants** when interrupted (`reap.py`), keeping the §4.6 single-group lifeline
+*unchanged*:
+
+- On **cancel / hard timeout**, pebble SIGTERMs the worker (a 3s grace before SIGKILL);
+  `harness.run_action` installs a SIGTERM handler **around `plugin.run()`** that
+  SIGKILLs the worker's descendants (a `/proc` tree walk), then chains to pebble's own
+  handler to exit. The handler is uninstalled after the run, so a clean completion's
+  worker recycle never reaps.
+- On **soft timeout**, the `_Timeout` branch reaps explicitly (the handler can't — the
+  run is abandoned but we still return a `timed_out` frame).
+
+A shared **ControlPersist `ssh` master is not a descendant** (it self-`setsid`s and
+reparents to init), so it survives — only the task's own module subtree dies. `/proc`
+is Linux-only; elsewhere the lifeline's teardown `killpg` remains the (looser) bound. A
+`shell: "foo &"` left attached (no `nohup`/`setsid`) is reaped on interrupt — matching
+ansible's own undefined handling of backgrounded processes.
 
 ## 5. Options Considered
 
