@@ -100,7 +100,7 @@ export interface AliInstanceInfoArgs {
   alicloud_secret_key?: string;
   /** The Alibaba Cloud security token. If not specified then the value of environment variable E(ALICLOUD_SECURITY_TOKEN) is used instead. */
   alicloud_security_token?: string;
-  /** The RAM Role Name attached on a ECS instance for API operations. You can retrieve this from the 'Access Control' section of the Alibaba Cloud console. */
+  /** The RAM Role Name attached on an ECS instance for API operations. You can retrieve this from the 'Access Control' section of the Alibaba Cloud console. */
   ecs_role_name?: string;
   /** A dict of filters to apply. Each dict item consists of a filter key and a filter value. The filter keys can be all of request parameters. See U(https://www.alibabacloud.com/help/doc-detail/25506.htm) for parameter details. Filter keys can be same as request parameter name or be lower case and use underscore (V("_")) or dash (V("-")) to connect different words in one parameter. C(InstanceIds) should be a list. C(Tag.n.Key) and C(Tag.n.Value) should be a dict and using O(tags) instead. */
   filters?: Record<string, unknown>;

@@ -105,6 +105,8 @@ export interface LdapEntryArgs {
   recursive?: boolean;
   /** Set the referrals chasing behavior. */
   referrals_chasing?: "disabled" | "anonymous";
+  /** The SASL authorization identity, equivalent to the C(-X) CLI argument. */
+  sasl_auth_id?: string;
   /** The class to use for SASL authentication. */
   sasl_class?: "external" | "gssapi";
   /** The O(server_uri) parameter may be a comma- or whitespace-separated list of URIs containing only the schema, the host, and the port fields. */

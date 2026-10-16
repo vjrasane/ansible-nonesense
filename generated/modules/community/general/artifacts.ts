@@ -11,10 +11,10 @@ export const ansibleCore: Artifact = {
   "root": "ansible_core-2.19.13/lib",
 } as const;
 export const communityGeneral: Artifact = {
-  "id": "community.general@13.4.0",
+  "id": "community.general@13.5.0",
   "url":
-    "https://galaxy.ansible.com/api/v3/plugin/ansible/content/published/collections/artifacts/community-general-13.4.0.tar.gz",
-  "sha256": "efd1c0b5dc6f89b9667e4bd77f2426c30545861910dba188593871095ede1804",
+    "https://galaxy.ansible.com/api/v3/plugin/ansible/content/published/collections/artifacts/community-general-13.5.0.tar.gz",
+  "sha256": "54598287e0ea0504aee2d32c884208ddf26f3ac41e0b4e773ff514af210787c4",
   "format": "tar.gz",
   "root": "",
 } as const;

@@ -103,6 +103,8 @@ export interface LdapSearchArgs {
   page_size?: number;
   /** Set the referrals chasing behavior. */
   referrals_chasing?: "disabled" | "anonymous";
+  /** The SASL authorization identity, equivalent to the C(-X) CLI argument. */
+  sasl_auth_id?: string;
   /** The class to use for SASL authentication. */
   sasl_class?: "external" | "gssapi";
   /** Set to V(true) to return the full attribute schema of entries, not their attribute values. Overrides O(attrs) when provided. */

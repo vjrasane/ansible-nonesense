@@ -1,14 +1,21 @@
-import { type AnsibleModuleMeta, defineActionModule, type ModuleFn, shellAction } from "@sensible-ts/core";
-import { command } from "./command.ts";
+import { type AnsibleModuleMeta, defineRemoteModule, type RemoteModuleSpec } from "@sensible-ts/core";
+import { coreScaffold } from "./artifacts.ts";
 
 // Auto-generated from: ansible.builtin.shell
 // DO NOT EDIT — regenerate with codegen
 const meta: AnsibleModuleMeta = {
   "fqcn": "ansible.builtin.shell",
-  "actionPlugin": false,
+  "actionPlugin": true,
   "powershell": false,
   "rawParams": true,
   "checkMode": "partial",
+} as const;
+const spec: RemoteModuleSpec = {
+  fqcn: "ansible.builtin.shell",
+  moduleFqn: "",
+  sources: [],
+  scaffold: coreScaffold,
+  markers: [],
 } as const;
 export interface ShellArgs {
   /** Change into this directory before running the command. */
@@ -51,9 +58,4 @@ export interface ShellReturn {
   /** The command standard output split in lines. */
   stdout_lines?: string | string[];
 }
-
-export const shell = defineActionModule<ShellArgs, ShellReturn>(
-  shellAction,
-  command as unknown as ModuleFn<ShellArgs, ShellReturn>,
-  meta,
-);
+export const shell = defineRemoteModule<ShellArgs, ShellReturn>(spec, meta);

@@ -84,6 +84,8 @@ const spec: RemoteModuleSpec = {
 export interface GithubSecretsArgs {
   /** The base URL for the GitHub API. */
   api_url?: string;
+  /** The GitHub environment name, for environment secrets. */
+  environment?: string;
   /** The name of the secret. */
   key?: string;
   /** The GitHub username or organization name. */

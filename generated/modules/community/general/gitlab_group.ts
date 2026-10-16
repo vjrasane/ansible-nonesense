@@ -149,7 +149,7 @@ export interface GitlabGroupArgs {
   /** Whether or not to validate SSL certs when supplying a HTTPS endpoint. */
   validate_certs?: boolean;
   /** Default visibility of the group. */
-  visibility?: "private" | "internal" | "public";
+  visibility?: "private" | "internal" | "public" | "unchanged";
   /** V(enabled) means everyone can access the wiki. */
   wiki_access_level?: "enabled" | "private" | "disabled";
 }

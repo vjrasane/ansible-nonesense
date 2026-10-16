@@ -119,7 +119,7 @@ export interface GitlabIssueArgs {
   /** Create or delete issue. */
   state?: "present" | "absent";
   /** Filter specifying state of issues while searching. */
-  state_filter?: "opened" | "closed";
+  state_filter?: "opened" | "closed" | "all";
   /** A title for the issue. The title is used as a unique identifier to ensure idempotency. */
   title: string;
   /** Whether or not to validate SSL certs when supplying a HTTPS endpoint. */

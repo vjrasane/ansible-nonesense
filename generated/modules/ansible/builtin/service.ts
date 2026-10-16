@@ -1,49 +1,15 @@
-import {
-  type AnsibleModuleMeta,
-  defineActionModule,
-  defineRemoteModule,
-  dispatchImpl,
-  type DispatchRegistry,
-  type ModuleFn,
-  type RemoteModuleSpec,
-} from "@sensible-ts/core";
+import { type AnsibleModuleMeta, defineRemoteModule, type RemoteModuleSpec } from "@sensible-ts/core";
 import { ansibleCore, coreScaffold } from "./artifacts.ts";
 
 // Auto-generated from: ansible.builtin.service
 // DO NOT EDIT — regenerate with codegen
 const meta: AnsibleModuleMeta = {
   "fqcn": "ansible.builtin.service",
-  "actionPlugin": false,
+  "actionPlugin": true,
   "powershell": false,
   "rawParams": false,
   "checkMode": "N/A",
 } as const;
-export interface ServiceArgs {
-  /** Additional arguments provided on the command line. */
-  arguments?: string;
-  /** Whether the service should start on boot. */
-  enabled?: boolean;
-  /** Name of the service. */
-  name: string;
-  /** If the service does not respond to the status command, name a substring to look for as would be found in the output of the C(ps) command as a stand-in for a status result. */
-  pattern?: string;
-  /** For OpenRC init scripts (e.g. Gentoo) only. */
-  runlevel?: string;
-  /** If the service is being V(restarted) then sleep this many seconds between the stop and start command. */
-  sleep?: number;
-  /** V(started)/V(stopped) are idempotent actions that will not run commands unless necessary. */
-  state?: "reloaded" | "restarted" | "started" | "stopped";
-  /** The service module actually uses system specific modules, normally through auto detection, this setting can force a specific module. */
-  use?: string;
-}
-
-export type ServiceReturn = Record<string, unknown>;
-const factName = "ansible_service_mgr";
-const registry: DispatchRegistry<ServiceArgs, ServiceReturn> = {
-  systemd: () => import("./systemd.ts").then((mod) => mod.systemd as unknown as ModuleFn<ServiceArgs, ServiceReturn>),
-  sysvinit: () =>
-    import("./sysvinit.ts").then((mod) => mod.sysvinit as unknown as ModuleFn<ServiceArgs, ServiceReturn>),
-};
 const spec: RemoteModuleSpec = {
   fqcn: "ansible.builtin.service",
   moduleFqn: "ansible.modules.service",
@@ -112,5 +78,24 @@ const spec: RemoteModuleSpec = {
     "ansible/modules/__init__.py",
   ],
 } as const;
-const mod = defineRemoteModule<ServiceArgs, ServiceReturn>(spec, meta);
-export const service = defineActionModule<ServiceArgs, ServiceReturn>(dispatchImpl(factName, registry), mod, meta);
+export interface ServiceArgs {
+  /** Additional arguments provided on the command line. */
+  arguments?: string;
+  /** Whether the service should start on boot. */
+  enabled?: boolean;
+  /** Name of the service. */
+  name: string;
+  /** If the service does not respond to the status command, name a substring to look for as would be found in the output of the C(ps) command as a stand-in for a status result. */
+  pattern?: string;
+  /** For OpenRC init scripts (e.g. Gentoo) only. */
+  runlevel?: string;
+  /** If the service is being V(restarted) then sleep this many seconds between the stop and start command. */
+  sleep?: number;
+  /** V(started)/V(stopped) are idempotent actions that will not run commands unless necessary. */
+  state?: "reloaded" | "restarted" | "started" | "stopped";
+  /** The service module actually uses system specific modules, normally through auto detection, this setting can force a specific module. */
+  use?: string;
+}
+
+export type ServiceReturn = Record<string, unknown>;
+export const service = defineRemoteModule<ServiceArgs, ServiceReturn>(spec, meta);

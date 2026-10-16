@@ -1,4 +1,3 @@
-import path from "node:path";
 import { code, Code, imp, joinCode } from "ts-poet";
 import type { Artifact, ArtifactFiles, ScaffoldFile } from "src/core/cache.ts";
 import { packageName } from "src/core/config.ts";
@@ -6,15 +5,8 @@ import { packageName } from "src/core/config.ts";
 const CORE = packageName;
 
 const defineRemoteModule = imp(`defineRemoteModule@${CORE}`);
-const defineActionModule = imp(`defineActionModule@${CORE}`);
-const dispatchImpl = imp(`dispatchImpl@${CORE}`);
-const copyAction = imp(`copyAction@${CORE}`);
-const fetchAction = imp(`fetchAction@${CORE}`);
-const shellAction = imp(`shellAction@${CORE}`);
 const AnsibleModuleMeta = imp(`t:AnsibleModuleMeta@${CORE}`);
 const RemoteModuleSpec = imp(`t:RemoteModuleSpec@${CORE}`);
-const DispatchRegistry = imp(`t:DispatchRegistry@${CORE}`);
-const ModuleFnType = imp(`t:ModuleFn@${CORE}`);
 const ArtifactType = imp(`t:Artifact@${CORE}`);
 const ScaffoldFileType = imp(`t:ScaffoldFile@${CORE}`);
 
@@ -62,36 +54,22 @@ interface AnsibleOption {
   suboptions?: Record<string, AnsibleOption>;
 }
 
-// --- codegen config (moved off the python side) ---------------------------
+// --- codegen config -------------------------------------------------------
 
-const ACTIONS: Record<string, { impl: ReturnType<typeof imp> }> = {
-  "ansible.builtin.copy": { impl: copyAction },
-  "ansible.builtin.fetch": { impl: fetchAction },
-};
+// Action plugins with no shippable module of their own (shell = command + _uses_shell,
+// fetch = controller-side download). The server runs them by fqcn, so we emit a plain
+// remote module with an empty-sources spec. Everything else with its own module (copy,
+// service, package, command, …) flows through the normal style-"new" remote path.
+const SERVER_ACTIONS = new Set([
+  "ansible.builtin.shell",
+  "ansible.builtin.fetch",
+  "ansible.builtin.package", // pure dispatcher: routes to apt/dnf/apk/… by fact
+]);
 
-// Modules with no shippable module of their own: emitted as an action whose
-// backing `mod` is another module's remote closure. shell is command run with
-// _uses_shell (mirrors ansible's shell action plugin).
-const DELEGATES: Record<
-  string,
-  { impl: ReturnType<typeof imp>; target: string }
-> = {
-  "ansible.builtin.shell": {
-    impl: shellAction,
-    target: "ansible.builtin.command",
-  },
-};
-
-// Action plugins that are pure passthroughs: they ship and run the module like a
-// normal remote module, with no controller-side work. We clear the actionPlugin
-// flag so RemoteModule runs them instead of hitting the unimplemented guard.
-// (copy/fetch/script/unarchive do real controller work; raw bypasses the module
-// system entirely — none belong here.)
-const PASSTHROUGH_ACTIONS = new Set(["ansible.builtin.command"]);
-
-// Modules we knowingly do not emit (no shippable module and no controller-side
-// support planned). Anything not emitted and not listed here makes codegen throw,
-// so skips stay a conscious decision rather than silent gaps.
+// Modules we knowingly do not emit: controller-side control-flow / meta / strategy
+// plugins with no host module, and real modules needing controller work not yet
+// enabled. Anything not emitted and not listed here makes codegen throw, so skips
+// stay a conscious decision rather than silent gaps.
 const SKIP = new Set<string>([
   // Control-flow / meta / strategy plugins — no remote module, run controller-side.
   "ansible.builtin.import_role",
@@ -121,43 +99,15 @@ const SKIP = new Set<string>([
   "community.general.shutdown",
 ]);
 
-/** What a module emits as, or null when it cannot be emitted (must be in SKIP). */
+// Everything is emitted as a plain remote module — the server owns ansible and runs
+// the real action plugin (copy, service dispatch, shell, fetch, …) by fqcn. A style
+// "old" module has no shippable payload; we still emit it if the server handles it
+// (SERVER_ACTIONS), otherwise it must be in SKIP.
 function kindOf(m: ModuleGen): string | null {
-  if (m.fqcn in DISPATCHERS) return "dispatcher";
-  if (m.fqcn in DELEGATES) return "delegate";
-  if (m.fqcn in ACTIONS) return "action";
-  if (m.style === "new") {
-    if (m.fqcn in PASSTHROUGH_ACTIONS) return "passthrough";
-    return m.meta.actionPlugin ? "remote(unhandled-action)" : "remote";
-  }
+  if (m.style === "new") return "remote";
+  if (SERVER_ACTIONS.has(m.fqcn)) return "remote";
   return null;
 }
-
-const DISPATCHERS: Record<
-  string,
-  { fact: string; registry: Record<string, string> }
-> = {
-  "ansible.builtin.package": {
-    fact: "ansible_pkg_mgr",
-    registry: {
-      apt: "ansible.builtin.apt",
-      dnf: "ansible.builtin.dnf",
-      dnf5: "ansible.builtin.dnf5",
-      apk: "community.general.apk",
-      pacman: "community.general.pacman",
-      zypper: "community.general.zypper",
-    },
-  },
-  // service is style "new", so the collapse gives it its own closure as the
-  // fallback mod (ansible.legacy.service) — openrc/bsd/etc. route there.
-  "ansible.builtin.service": {
-    fact: "ansible_service_mgr",
-    registry: {
-      systemd: "ansible.builtin.systemd",
-      sysvinit: "ansible.builtin.sysvinit",
-    },
-  },
-};
 
 // --- identifiers & types --------------------------------------------------
 
@@ -234,17 +184,6 @@ const safeBinding = (name: string) =>
 const isIdent = (s: string) => /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(s);
 const shortName = (fqcn: string) => fqcn.split(".").at(-1)!;
 
-/** fqcn → its generated file, relative to the modules root (ns/coll/short.ts). */
-const fqcnToFile = (fqcn: string) => `${fqcn.split(".").join("/")}.ts`;
-
-/** Relative import path from one module's generated file to another's (cross-collection safe). */
-function relModulePath(fromFqcn: string, toFqcn: string): string {
-  const rel = path.posix.relative(
-    path.posix.dirname(fqcnToFile(fromFqcn)),
-    fqcnToFile(toFqcn),
-  );
-  return rel.startsWith(".") ? rel : `./${rel}`;
-}
 const pascal = (name: string) =>
   name
     .split("_")
@@ -312,19 +251,8 @@ function emitInterface(
 const preamble = (fqcn: string) =>
   `// Auto-generated from: ${fqcn}\n// DO NOT EDIT — regenerate with codegen`;
 
-// A handled module (passthrough, or action/dispatch/delegate whose backing remote
-// module we run ourselves) must not carry actionPlugin: true, or RemoteModule's
-// "action plugin not implemented" guard fires when we execute it. Only genuinely
-// unhandled action plugins keep the flag (and are meant to throw at runtime).
 function emitMeta(m: ModuleGen): Code {
-  const handled =
-    PASSTHROUGH_ACTIONS.has(m.fqcn) ||
-    m.fqcn in ACTIONS ||
-    m.fqcn in DISPATCHERS ||
-    m.fqcn in DELEGATES;
-  const meta =
-    handled && m.meta.actionPlugin ? { ...m.meta, actionPlugin: false } : m.meta;
-  return code`const meta: ${AnsibleModuleMeta} = ${JSON.stringify(meta)} as const;`;
+  return code`const meta: ${AnsibleModuleMeta} = ${JSON.stringify(m.meta)} as const;`;
 }
 
 function emitRemoteSpec(m: ModuleGen): Code {
@@ -363,9 +291,6 @@ function emitModule(m: ModuleGen): Code {
   const Return = `${pascal(short)}Return`;
   const types = `${emitInterface(Args, m.options)}\n\n${emitInterface(Return, m.returndocs)}`;
 
-  if (m.fqcn in DISPATCHERS || m.fqcn in ACTIONS || m.fqcn in DELEGATES)
-    return emitActionLike(m, fn, Args, Return, types);
-
   return code`
 ${preamble(m.fqcn)}
 ${emitMeta(m)}
@@ -373,72 +298,6 @@ ${emitRemoteSpec(m)}
 ${types}
 export const ${fn} = ${defineRemoteModule}<${Args}, ${Return}>(spec, meta);
 `;
-}
-
-/**
- * action / controller / dispatch all collapse to defineActionModule(impl, mod?, meta):
- * `impl` is a named action impl or dispatchImpl(spec); `mod` is the module's own
- * remote closure when it has one (style "new"), else undefined.
- */
-function emitActionLike(
-  m: ModuleGen,
-  fn: string,
-  Args: string,
-  Return: string,
-  types: string,
-): Code {
-  const dispatch = DISPATCHERS[m.fqcn];
-  const delegate = DELEGATES[m.fqcn];
-  const dispatchDecl = dispatch
-    ? emitDispatchSpec(m, dispatch, Args, Return)
-    : "";
-  const impl = dispatch
-    ? code`${dispatchImpl}(factName, registry)`
-    : (delegate ?? ACTIONS[m.fqcn]).impl;
-
-  // mod precedence: a delegated module's closure, else the module's own (style
-  // "new"), else none.
-  const hasOwnMod = !delegate && m.style === "new";
-  const modDecl = hasOwnMod
-    ? code`
-${emitRemoteSpec(m)}
-const mod = ${defineRemoteModule}<${Args}, ${Return}>(spec, meta);`
-    : "";
-  const modArg = delegate
-    ? code`${imp(
-        `${safeBinding(shortName(delegate.target))}@${relModulePath(m.fqcn, delegate.target)}`,
-      )} as unknown as ${ModuleFnType}<${Args}, ${Return}>`
-    : hasOwnMod
-      ? code`mod`
-      : code`undefined`;
-
-  return code`
-${preamble(m.fqcn)}
-${emitMeta(m)}
-${types}
-${dispatchDecl}${modDecl}
-export const ${fn} = ${defineActionModule}${dispatch || delegate ? code`<${Args}, ${Return}>` : code``}(${impl}, ${modArg}, meta);
-`;
-}
-
-/** Lazy cross-module registry → a typed DispatchModuleSpec (backends must conform). */
-function emitDispatchSpec(
-  m: ModuleGen,
-  dispatch: { fact: string; registry: Record<string, string> },
-  Args: string,
-  Return: string,
-): Code {
-  const entries = Object.entries(dispatch.registry).map(([key, target]) => {
-    const k = isIdent(key) ? key : JSON.stringify(key);
-    const exp = safeBinding(shortName(target));
-    // TODO: backends are heterogeneous; assert to the dispatcher's type until a
-    // discriminated union lets this check properly.
-    return code`${k}: () => import(${JSON.stringify(relModulePath(m.fqcn, target))}).then((mod) => mod.${exp} as unknown as ${ModuleFnType}<${Args}, ${Return}>)`;
-  });
-  return code`const factName = ${JSON.stringify(dispatch.fact)};
-const registry: ${DispatchRegistry}<${Args}, ${Return}> = {
-  ${joinCode(entries, { on: ",\n    " })},
-};`;
 }
 
 // --- public API -----------------------------------------------------------
@@ -449,15 +308,18 @@ export function emitCollection(result: CodegenResult): Map<string, string> {
   const emitted: ModuleGen[] = [];
   const unexpected: string[] = [];
   for (const m of result.modules) {
+    if (SKIP.has(m.fqcn)) {
+      console.error(`  skip  ${m.fqcn}`);
+      continue;
+    }
     const kind = kindOf(m);
     if (!kind) {
-      if (!SKIP.has(m.fqcn)) unexpected.push(m.fqcn);
-      else console.error(`  skip  ${m.fqcn}`);
+      unexpected.push(m.fqcn);
       continue;
     }
     out.set(`${shortName(m.fqcn)}.ts`, emitModule(m).toString());
     emitted.push(m);
-    console.error(`  emit  ${kind.padEnd(24)} ${m.fqcn}`);
+    console.error(`  emit  ${kind.padEnd(10)} ${m.fqcn}`);
   }
 
   if (unexpected.length)

@@ -5,7 +5,7 @@ import { ansibleCore, coreScaffold } from "./artifacts.ts";
 // DO NOT EDIT — regenerate with codegen
 const meta: AnsibleModuleMeta = {
   "fqcn": "ansible.builtin.command",
-  "actionPlugin": false,
+  "actionPlugin": true,
   "powershell": false,
   "rawParams": true,
   "checkMode": "partial",

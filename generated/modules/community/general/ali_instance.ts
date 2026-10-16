@@ -116,7 +116,7 @@ export interface AliInstanceArgs {
   description?: string;
   /** Specifies whether to send a dry-run request. */
   dry_run?: boolean;
-  /** The RAM Role Name attached on a ECS instance for API operations. You can retrieve this from the 'Access Control' section of the Alibaba Cloud console. */
+  /** The RAM Role Name attached on an ECS instance for API operations. You can retrieve this from the 'Access Control' section of the Alibaba Cloud console. */
   ecs_role_name?: string;
   /** Whether the current operation needs to be execute forcibly. */
   force?: boolean;

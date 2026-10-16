@@ -182,7 +182,7 @@ export interface GitlabProjectArgs {
   /** Squash commits when merging. */
   squash_option?: "never" | "always" | "default_off" | "default_on";
   /** Create or delete project. */
-  state?: "present" | "absent";
+  state?: "present" | "absent" | "archived" | "unarchived";
   /** A topic or list of topics to be assigned to a project. */
   topics?: string | string[];
   /** Used to create a personal project under a user's name. */

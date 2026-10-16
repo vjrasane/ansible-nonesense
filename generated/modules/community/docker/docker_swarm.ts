@@ -93,6 +93,7 @@ const spec: RemoteModuleSpec = {
       "plugins/module_utils/_common.py",
       "plugins/module_utils/_common_api.py",
       "plugins/module_utils/_common_cli.py",
+      "plugins/module_utils/_secrets.py",
       "plugins/module_utils/_socket_helper.py",
       "plugins/module_utils/_swarm.py",
       "plugins/module_utils/_util.py",

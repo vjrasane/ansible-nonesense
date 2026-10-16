@@ -8,7 +8,7 @@ const meta: AnsibleModuleMeta = {
   "actionPlugin": false,
   "powershell": false,
   "rawParams": false,
-  "checkMode": "none",
+  "checkMode": "full",
 } as const;
 const spec: RemoteModuleSpec = {
   fqcn: "community.general.lvm_pv",
@@ -89,14 +89,28 @@ const spec: RemoteModuleSpec = {
   ],
 } as const;
 export interface LvmPvArgs {
+  /** Whether the PV can be used for allocation of physical extents. */
+  allocatable?: boolean;
+  /** Align the start of the PV data area to a multiple of this value, for example V(1m). */
+  dataalignment?: string;
   /** Path to the block device to manage. */
   device: string;
   /** Force the operation. */
   force?: boolean;
+  /** Whether metadata areas on the PV are ignored, meaning LVM does not store VG metadata on it. */
+  metadataignore?: boolean;
+  /** Approximate amount of space to reserve for VG metadata on the PV, for example V(128k) or V(1m). */
+  metadatasize?: string;
+  /** Number of metadata areas to reserve on the PV for storing VG metadata. */
+  pvmetadatacopies?: number;
   /** Resize PV to device size when O(state=present). */
   resize?: boolean;
   /** Control if the physical volume exists. */
   state?: "present" | "absent";
+  /** List of tags that must be set on the PV. */
+  tags?: string | string[];
+  /** Control whether the first 4 sectors of the device are wiped when creating the PV. */
+  zero?: boolean;
 }
 
 export type LvmPvReturn = Record<string, unknown>;

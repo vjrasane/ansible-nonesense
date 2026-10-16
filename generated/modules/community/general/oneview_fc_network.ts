@@ -86,7 +86,7 @@ const spec: RemoteModuleSpec = {
 export interface OneviewFcNetworkArgs {
   /** OneView API Version. */
   api_version?: number;
-  /** Path to a JSON configuration file containing the OneView client configuration. The configuration file is optional and when used should be present in the host running the ansible commands. If the file path is not provided, the configuration is loaded from environment variables. For links to example configuration files or how to use the environment variables verify the notes section. */
+  /** Path to a JSON configuration file containing the OneView client configuration. The configuration file is optional and when used should be present on the host running the Ansible commands. If the file path is not provided, the configuration is loaded from environment variables. For links to example configuration files or how to use the environment variables verify the notes section. */
   config?: string;
   /** List with the Fibre Channel Network properties. */
   data: Record<string, unknown>;

@@ -8,7 +8,7 @@ const meta: AnsibleModuleMeta = {
   "actionPlugin": false,
   "powershell": false,
   "rawParams": false,
-  "checkMode": "none",
+  "checkMode": "full",
 } as const;
 const spec: RemoteModuleSpec = {
   fqcn: "community.general.lvm_pv_move_data",

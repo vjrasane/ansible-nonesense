@@ -87,7 +87,7 @@ export interface MavenArtifactArgs {
   /** The attributes the resulting filesystem object should have. */
   attributes?: string;
   /** If V(md5), checksums use the MD5 algorithm. This is the default. */
-  checksum_alg?: "md5" | "sha1";
+  checksum_alg?: "md5" | "sha1" | "sha256" | "sha512";
   /** The maven classifier coordinate. */
   classifier?: string;
   /** PEM formatted certificate chain file to be used for SSL client authentication. */
@@ -140,7 +140,7 @@ export interface MavenArtifactArgs {
   username?: string;
   /** If V(false), SSL certificates are not validated. This should only be set to V(false) when no other option exists. */
   validate_certs?: boolean;
-  /** If V(never), the MD5/SHA1 checksum is never downloaded and verified. */
+  /** If V(never), the checksum is never downloaded and verified. */
   verify_checksum?: "never" | "download" | "change" | "always";
   /** The maven version coordinate. */
   version?: string;

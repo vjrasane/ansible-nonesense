@@ -1,13 +1,21 @@
-import { type AnsibleModuleMeta, defineActionModule, fetchAction } from "@sensible-ts/core";
+import { type AnsibleModuleMeta, defineRemoteModule, type RemoteModuleSpec } from "@sensible-ts/core";
+import { coreScaffold } from "./artifacts.ts";
 
 // Auto-generated from: ansible.builtin.fetch
 // DO NOT EDIT — regenerate with codegen
 const meta: AnsibleModuleMeta = {
   "fqcn": "ansible.builtin.fetch",
-  "actionPlugin": false,
+  "actionPlugin": true,
   "powershell": false,
   "rawParams": false,
   "checkMode": "full",
+} as const;
+const spec: RemoteModuleSpec = {
+  fqcn: "ansible.builtin.fetch",
+  moduleFqn: "",
+  sources: [],
+  scaffold: coreScaffold,
+  markers: [],
 } as const;
 export interface FetchArgs {
   /** A directory to save the file into. */
@@ -23,5 +31,4 @@ export interface FetchArgs {
 }
 
 export type FetchReturn = Record<string, unknown>;
-
-export const fetch = defineActionModule(fetchAction, undefined, meta);
+export const fetch = defineRemoteModule<FetchArgs, FetchReturn>(spec, meta);
