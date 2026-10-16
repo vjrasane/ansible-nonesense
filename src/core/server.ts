@@ -65,6 +65,20 @@ export interface ResultFrame {
   deprecations: string[];
 }
 
+// A server→client `progress` notification (design §4.5.1): internal events not tied to
+// a single reply — cache/collection installs, fact warmups. `token` correlates begin↔end.
+export interface ProgressNotification {
+  kind: string; // "collection" | "facts" | …
+  token: string;
+  phase: "begin" | "end";
+  ok?: boolean;
+  requestId?: unknown;
+  name?: string;
+  version?: string;
+  host?: string;
+  subset?: string[];
+}
+
 // Drop the python path-pollution vars so the spawned venv resolves packages only from
 // itself (children inherit this, so the forkserver/workers stay clean too).
 function hermeticEnv(env?: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
@@ -80,7 +94,14 @@ export class ServerClient {
   private readonly conn: MessageConnection;
   private inflight = 0;
 
-  constructor(pythonPath: string, opts: { cwd?: string; env?: NodeJS.ProcessEnv } = {}) {
+  constructor(
+    pythonPath: string,
+    opts: {
+      cwd?: string;
+      env?: NodeJS.ProcessEnv;
+      onProgress?: (p: ProgressNotification) => void;
+    } = {},
+  ) {
     this.child = spawn(pythonPath, ["-m", "ansible_jsonrpc_server"], {
       // stderr inherited so server diagnostics surface; stdin/stdout are the seam.
       stdio: ["pipe", "pipe", "inherit"],
@@ -94,6 +115,7 @@ export class ServerClient {
       new StreamMessageReader(this.child.stdout!),
       new StreamMessageWriter(this.child.stdin!),
     );
+    if (opts.onProgress) this.conn.onNotification("progress", opts.onProgress);
     this.conn.listen();
     // The server is a background helper: it must not hold node's event loop open. Unref
     // the child + pipes so, once the caller's own work is done and no request is in
