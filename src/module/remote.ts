@@ -1,5 +1,5 @@
 import { currentContext } from "src/core/context.ts";
-import { CACHE } from "src/core/cache.ts";
+import { getServer, hostSpecFor } from "src/core/backend.ts";
 import {
   AnsibleModuleMeta,
   getModuleFn,
@@ -11,10 +11,8 @@ import {
   ModuleSkippedResult,
   RawResult,
 } from "src/module/module.ts";
-import { execPythonOnHost } from "src/core/host.ts";
+import type { ResultFrame } from "src/core/server.ts";
 import { ArtifactFiles, ScaffoldFile } from "src/core/cache.ts";
-
-const ANSIBLE_VERSION = "2.17.x"; // the generated version const
 
 const SKIPPED_RESULT: ModuleSkippedResult<unknown> = {
   status: "skipped",
@@ -35,20 +33,13 @@ export class RemoteModule<
   TArgs extends Record<string, any>,
   TReturn,
 > implements Module<TArgs, TReturn> {
-  private _payload: Promise<string> | null = null;
-
   constructor(
-    private readonly spec: RemoteModuleSpec,
+    _spec: RemoteModuleSpec,  // retained for API shape; server builds its own payload
     public readonly meta: AnsibleModuleMeta,
   ) {}
 
   get displayName(): string {
     return this.meta.fqcn;
-  }
-
-  get payload(): Promise<string> {
-    if (this._payload == null) this._payload = CACHE.buildPayload(this.spec);
-    return this._payload;
   }
 
   async exec(
@@ -59,8 +50,8 @@ export class RemoteModule<
     const ctx = currentContext();
     const mergedOpts = { ...ctx.opts, ...moduleOpts };
 
-    if (this.meta.actionPlugin)
-      throw new Error(`${this.meta.fqcn} action plugin not implemented`);
+    // Action plugins now run natively in the server (it owns ansible-core), so no
+    // longer rejected here — the server executes `_execute_module` for us.
     if (this.meta.powershell)
       throw new Error(`${this.meta.fqcn} powershell module not supported`);
 
@@ -76,44 +67,38 @@ export class RemoteModule<
       a["_raw_params"] = a["cmd"];
       delete a["cmd"];
     }
-    const params = {
-      ANSIBLE_MODULE_ARGS: {
-        ...a,
-        _ansible_check_mode: mergedOpts.check ?? false,
-        _ansible_diff: mergedOpts.diff ?? false,
-        _ansible_no_log: mergedOpts.noLog ?? false,
-        _ansible_verbosity: 0,
-        _ansible_module_name: this.meta.fqcn.split(".").at(-1),
-        _ansible_version: ANSIBLE_VERSION,
-        _ansible_remote_tmp: "~/.ansible/tmp",
+
+    const server = await getServer();
+    const frame = await server.runAction({
+      host: hostSpecFor(ctx.host, mergedOpts.become),
+      fqcn: this.meta.fqcn,
+      args: a,
+      // Pass the interpreter so ansible skips discovery (which needs gathered facts).
+      vars: { ansible_python_interpreter: await ctx.host.interpreter },
+      flags: {
+        check_mode: mergedOpts.check ?? false,
+        diff: mergedOpts.diff ?? false,
+        no_log: mergedOpts.noLog ?? false,
       },
-    };
-    const paramsJson = JSON.stringify(params);
-    const paramsBase64 = Buffer.from(paramsJson, "utf-8").toString("base64");
-    const zipdata = await this.payload;
-    const wrapper = [
-      "import base64, os, sys, tempfile, atexit, shutil",
-      'tmp = tempfile.mkdtemp(prefix="ansiballz_")',
-      "atexit.register(shutil.rmtree, tmp, ignore_errors=True)",
-      'zp = os.path.join(tmp, "payload.zip")',
-      'with open(zp, "wb") as f:',
-      `    f.write(base64.b64decode("${zipdata}"))`,
-      "sys.path.insert(0, zp)",
-      "from ansible.module_utils._internal._ansiballz._loader import run_module",
-      "run_module(",
-      `    json_params=base64.b64decode("${paramsBase64}"),`,
-      '    profile="legacy",',
-      `    module_fqn="${this.spec.moduleFqn}",`,
-      "    modlib_path=zp,",
-      "    extensions={},",
-      ")",
-    ].join("\n");
-    const raw: RawResult<TReturn> = await execPythonOnHost(ctx.host, wrapper, {
-      become: mergedOpts.become,
     });
 
+    const raw = frameToRaw<TReturn>(frame);
     return finalizeResult(this.meta.fqcn, raw, mergedOpts.ignoreErrors ?? false);
   }
+}
+
+// Map the server's result envelope back to the raw module dict finalizeResult expects.
+// The server lifts `changed` and a status enum out of the dict; everything else (rc,
+// stdout, invocation, …) is the module's own result.
+function frameToRaw<TReturn>(frame: ResultFrame): RawResult<TReturn> {
+  return {
+    ...(frame.result as any),
+    changed: frame.changed,
+    failed: frame.status !== "ok" && frame.status !== "skipped",
+    skipped: frame.status === "skipped",
+    invocation: (frame.result as any).invocation ?? {},
+    warnings: frame.warnings,
+  };
 }
 
 // Maps a raw module result to a typed ModuleResult. A failed result throws

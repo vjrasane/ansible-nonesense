@@ -1,0 +1,57 @@
+import { afterAll, expect, test } from "vitest";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { localhost } from "src/core/host.ts";
+import { getServer } from "src/core/backend.ts";
+import { defineRemoteModule, type RemoteModuleSpec } from "src/module/remote.ts";
+import type { AnsibleModuleMeta } from "src/module/module.ts";
+
+// Integration: the public module API (defineRemoteModule → exec) now runs through the
+// ansible-jsonrpc-server backend instead of the in-TS AnsiballZ path. Localhost only.
+const mod = (meta: Partial<AnsibleModuleMeta> & { fqcn: string }) => {
+  const spec: RemoteModuleSpec = {
+    fqcn: meta.fqcn,
+    moduleFqn: "",
+    sources: [],
+    scaffold: [],
+    markers: [],
+  };
+  return defineRemoteModule<any, any>(spec, {
+    actionPlugin: false,
+    powershell: false,
+    rawParams: false,
+    checkMode: "none",
+    ...meta,
+  });
+};
+
+const ping = mod({ fqcn: "ansible.builtin.ping" });
+const command = mod({ fqcn: "ansible.builtin.command", rawParams: true, checkMode: "partial" });
+const copy = mod({ fqcn: "ansible.builtin.copy", actionPlugin: true, checkMode: "full" });
+
+const tmp = mkdtempSync(path.join(tmpdir(), "sensible-backend-"));
+
+afterAll(async () => {
+  (await getServer()).close();
+  rmSync(tmp, { recursive: true, force: true });
+});
+
+test("ping → pong through the server", async () => {
+  const res = await localhost.run(() => ping());
+  expect(res.status).toBe("ok");
+  expect(res.ping).toBe("pong");
+}, 60_000);
+
+test("command echo → changed + stdout", async () => {
+  const res = await localhost.run(() => command({ cmd: "echo hi" }));
+  expect(res.status).toBe("changed");
+  expect(res.stdout).toBe("hi");
+}, 30_000);
+
+test("copy (action plugin) writes a file", async () => {
+  const dest = path.join(tmp, "hello.txt");
+  const res = await localhost.run(() => copy({ content: "hello\n", dest }));
+  expect(res.status).toBe("changed");
+  expect(readFileSync(dest, "utf8")).toBe("hello\n");
+}, 30_000);
