@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { BecomeOpts } from "src/core/connection.ts";
+import type { HostFacts } from "src/core/facts.ts";
 import type { Host } from "src/core/host.ts";
 import { bootstrap, ServerClient, type HostSpec } from "src/core/server.ts";
 
@@ -61,11 +62,11 @@ getServer();
 export async function gatherFacts(
   host: Host,
   gatherAll = false,
-): Promise<Record<string, any>> {
+): Promise<HostFacts> {
   const server = await getServer();
   const spec = hostSpecFor(host);
   spec.gather_subset = [gatherAll ? "all" : "min"];
-  return server.gatherFacts({ host: spec, vars: {} });
+  return server.gatherFacts({ host: spec, vars: {} }) as Promise<HostFacts>;
 }
 
 export function hostSpecFor(

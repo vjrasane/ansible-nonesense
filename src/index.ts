@@ -17,10 +17,12 @@ export {
 import { currentHost as _currentHost } from "src/core/context.ts";
 import { gatherFacts } from "src/core/backend.ts";
 export { host, type HostRef } from "src/core/host.ts";
+export type { HostFacts } from "src/core/facts.ts";
 import type { HostRef } from "src/core/host.ts";
+import type { HostFacts } from "src/core/facts.ts";
 export const currentHost = (): HostRef => _currentHost();
 // Host facts from the server (in-memory cached). gatherAll=false → minimal subset.
-export const facts = (gatherAll = false): Promise<Record<string, any>> =>
+export const facts = (gatherAll = false): Promise<HostFacts> =>
   gatherFacts(_currentHost(), gatherAll);
 export { setEventHandler } from "src/core/events.ts";
 export { setLogger, logReporter, withLevel } from "src/core/logger.ts";
