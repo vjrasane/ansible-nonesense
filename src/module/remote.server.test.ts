@@ -2,8 +2,8 @@ import { afterAll, expect, test } from "vitest";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { localhost } from "src/core/host.ts";
-import { getServer } from "src/core/backend.ts";
+import { host, localhost, type Host } from "src/core/host.ts";
+import { getServer, hostSpecFor } from "src/core/backend.ts";
 import { defineRemoteModule, type RemoteModuleSpec } from "src/module/remote.ts";
 import type { AnsibleModuleMeta } from "src/module/module.ts";
 
@@ -35,6 +35,37 @@ const tmp = mkdtempSync(path.join(tmpdir(), "sensible-backend-"));
 afterAll(async () => {
   (await getServer()).close();
   rmSync(tmp, { recursive: true, force: true });
+});
+
+test("hostSpecFor maps ssh config to the ansible connection var bag", () => {
+  const h = host("rpi5-01", {
+    user: "ubuntu",
+    port: 2222,
+    identityFile: "/keys/id_ed25519",
+  }) as Host;
+  expect(hostSpecFor(h, true)).toEqual({
+    id: "rpi5-01",
+    connection: {
+      type: "ssh",
+      vars: {
+        ansible_host: "rpi5-01",
+        ansible_user: "ubuntu",
+        ansible_port: 2222,
+        ansible_ssh_private_key_file: "/keys/id_ed25519",
+      },
+    },
+    become: { ansible_become: true },
+  });
+});
+
+test("hostSpecFor defaults ansible_host to the host name, omits unset fields", () => {
+  const spec = hostSpecFor(host("web1") as Host);
+  expect(spec.connection).toEqual({ type: "ssh", vars: { ansible_host: "web1" } });
+  expect(spec.become).toEqual({});
+});
+
+test("hostSpecFor maps localhost to a local connection", () => {
+  expect(hostSpecFor(localhost).connection).toEqual({ type: "local" });
 });
 
 test("ping → pong through the server", async () => {

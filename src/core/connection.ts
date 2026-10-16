@@ -197,6 +197,12 @@ export class SSHConnection extends AbstractConnection {
     this.controlPath = join(dir, "%C");
   }
 
+  // The resolved connection params (host already defaulted to the name), for the
+  // server backend to forward as the ansible ssh connection var bag.
+  get config(): Readonly<SSHConfig> {
+    return this.cfg;
+  }
+
   protected spawn(argv: string[], opts?: ExecOpts) {
     return spawnStream(
       "ssh",
