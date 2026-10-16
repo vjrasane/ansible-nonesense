@@ -63,6 +63,13 @@ export interface ResultFrame {
   deprecations: string[];
 }
 
+// Drop the python path-pollution vars so the spawned venv resolves packages only from
+// itself (children inherit this, so the forkserver/workers stay clean too).
+function hermeticEnv(env?: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const { PYTHONPATH: _p, PYTHONHOME: _h, ...rest } = env ?? process.env;
+  return { ...rest, PYTHONNOUSERSITE: "1" };
+}
+
 // Thin client that owns one GPL ansible-jsonrpc-server child and talks to it over
 // the JSON-RPC stdio seam. The server is confined to its own process; this module
 // imports neither ansible nor the server (licensing firewall, design §9).
@@ -75,7 +82,10 @@ export class ServerClient {
       // stderr inherited so server diagnostics surface; stdin/stdout are the seam.
       stdio: ["pipe", "pipe", "inherit"],
       cwd: opts.cwd,
-      env: opts.env,
+      // Keep the venv hermetic: a surrounding nix/devenv puts its own ansible-core on
+      // PYTHONPATH (prepended to sys.path), which would shadow the venv's pinned
+      // version. Strip it so the server + its forkserver/workers use only the venv.
+      env: hermeticEnv(opts.env),
     });
     this.conn = createMessageConnection(
       new StreamMessageReader(this.child.stdout!),
