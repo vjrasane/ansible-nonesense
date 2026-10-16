@@ -51,6 +51,8 @@ export interface RunActionParams {
   args?: Record<string, unknown>;
   vars?: Record<string, unknown>;
   flags?: Record<string, unknown>;
+  // Pinned collection to install server-side before running (omit for ansible.builtin).
+  collection?: { name: string; version: string; source?: string };
 }
 
 export type ActionStatus = "ok" | "failed" | "unreachable" | "skipped";

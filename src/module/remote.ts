@@ -36,10 +36,14 @@ export class RemoteModule<
   TArgs extends Record<string, any>,
   TReturn,
 > implements Module<TArgs, TReturn> {
+  private readonly collection: RemoteModuleSpec["collection"];
+
   constructor(
-    _spec: RemoteModuleSpec,  // retained for API shape; server builds its own payload
+    spec: RemoteModuleSpec,  // the server builds its own payload; we need only the pin
     public readonly meta: AnsibleModuleMeta,
-  ) {}
+  ) {
+    this.collection = spec.collection;
+  }
 
   get displayName(): string {
     return this.meta.fqcn;
@@ -84,6 +88,8 @@ export class RemoteModule<
         diff: mergedOpts.diff ?? false,
         no_log: mergedOpts.noLog ?? false,
       },
+      // Non-core modules carry their pinned collection; the server installs it first.
+      ...(this.collection ? { collection: this.collection } : {}),
     });
 
     const raw = frameToRaw<TReturn>(frame);

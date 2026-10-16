@@ -80,6 +80,38 @@ test("command echo → changed + stdout", async () => {
   expect(res.stdout).toBe("hi");
 }, 30_000);
 
+test("a collection module sends its pinned collection; builtin omits it", async () => {
+  const sent: any[] = [];
+  const fake = {
+    runAction: async (p: any) => {
+      sent.push(p);
+      return { status: "ok", changed: false, result: {}, warnings: [], deprecations: [] };
+    },
+  };
+  const key = Symbol.for("@sensible-ts/core#serverClient");
+  const prev = (globalThis as any)[key];
+  (globalThis as any)[key] = Promise.resolve(fake); // swap in the recorder
+  try {
+    const dockerPrune = defineRemoteModule<any, any>(
+      {
+        fqcn: "community.docker.docker_prune",
+        moduleFqn: "",
+        sources: [],
+        scaffold: [],
+        markers: [],
+        collection: { name: "community.docker", version: "5.4.0" },
+      },
+      { fqcn: "community.docker.docker_prune", actionPlugin: false, powershell: false, rawParams: false, checkMode: "none" },
+    );
+    await localhost.run(() => dockerPrune());
+    await localhost.run(() => mod({ fqcn: "ansible.builtin.ping" })());
+  } finally {
+    (globalThis as any)[key] = prev;
+  }
+  expect(sent[0].collection).toEqual({ name: "community.docker", version: "5.4.0" });
+  expect(sent[1].collection).toBeUndefined();
+});
+
 test("gatherFacts (min) returns facts incl. ansible_user_id/ansible_user_dir", async () => {
   const f = await gatherFacts(localhost, false);
   expect(f.ansible_user_id).toBeDefined();
