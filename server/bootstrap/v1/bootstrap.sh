@@ -37,19 +37,19 @@ if command -v flock >/dev/null 2>&1; then
   flock 9
 fi
 
-# Idempotent: the console script exists → already provisioned.
-if [ -x "$venv/bin/ansible-jsonrpc-server" ]; then
+# Idempotent: the .ready marker means a prior run fully provisioned this venv.
+if [ -f "$venv/.ready" ]; then
   echo "$venv/bin/python"
   exit 0
 fi
 
-# Build fresh in a temp dir, then atomically move into place, so a crashed/interrupted
-# install never leaves a half-populated venv that the idempotency check would accept.
-tmp="$venv.tmp.$$"
-rm -rf "$tmp"
-"$py" -m venv "$tmp"
-"$tmp/bin/python" -m pip install --quiet --disable-pip-version-check "$src"
+# Build in place (NOT build-in-tmp-then-mv): pip bakes the venv's absolute path into
+# console-script shebangs (ansible-galaxy, …), so a move would leave them pointing at
+# the old path. Clear any partial/failed build first; the flock above serializes runs,
+# and the .ready marker — written only on success — makes a half-build non-idempotent.
 rm -rf "$venv"
-mv "$tmp" "$venv"
+"$py" -m venv "$venv"
+"$venv/bin/python" -m pip install --quiet --disable-pip-version-check "$src"
+: > "$venv/.ready"
 
 echo "$venv/bin/python"

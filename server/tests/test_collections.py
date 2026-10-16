@@ -80,8 +80,8 @@ def test_builds_install_command(tmp_path):
 
     CollectionCache(str(tmp_path), run=run, galaxy="ansible-galaxy").ensure(COLL)
     assert captured["cmd"] == [
-        "ansible-galaxy", "collection", "install", "community.general:9.4.0",
-        "-p", str(tmp_path),
+        sys.executable, "ansible-galaxy", "collection", "install",
+        "community.general:9.4.0", "-p", str(tmp_path),
     ]
 
 
@@ -125,7 +125,7 @@ def test_make_handlers_installs_collection_before_run(tmp_path, monkeypatch):
                                str(tmp_path))["runAction"]
     handler(RunParams(host=HostSpec(connection=Connection(type="local")),
                       fqcn="community.general.foo", collection=COLL))
-    assert calls[0][1:4] == ["collection", "install", "community.general:9.4.0"]
+    assert calls[0][2:5] == ["collection", "install", "community.general:9.4.0"]
 
 
 def _lay_out_collection(root):

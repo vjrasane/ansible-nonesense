@@ -52,7 +52,9 @@ class CollectionCache:
         token = "collection:%s" % coll.name
         emit("progress", {"token": token, "phase": "begin", "kind": "collection",
                           "name": coll.name, "version": coll.version})
-        cmd = [self._galaxy, "collection", "install",
+        # Run the galaxy console script through our own interpreter rather than
+        # exec'ing it directly, so a stale/relocated shebang can never ENOENT.
+        cmd = [sys.executable, self._galaxy, "collection", "install",
                "%s:%s" % (coll.name, coll.version), "-p", self._path]
         if coll.source:
             cmd += ["--server", coll.source]
